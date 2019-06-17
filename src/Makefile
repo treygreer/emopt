@@ -19,11 +19,13 @@ CXXFLAGS = -Wall -fopenmp -O3 -march=native -DNDEBUG -std=c++11
 INCLUDES = -I${EIGEN_DIR} -I${BOOST_DIR}
 LDFLAGS = -lpthread
 
-all: Grid.o Grid_ctypes.o FDTD.o Grid.cpp Grid.hpp Grid_ctypes.cpp Grid_ctypes.hpp fdtd.cpp fdtd.hpp
+all: Grid.o Grid_ctypes.o FDTD.o FDTD_cuda.o Grid.cpp Grid.hpp Grid_ctypes.cpp Grid_ctypes.hpp fdtd.cpp fdtd.hpp fdtd_cuda.cpp fdtd_cuda.hpp
 	${CC} ${SHARED_FLAG} -fopenmp -fPIC -o Grid.so Grid.o Grid_ctypes.o ${LDFLAGS}
 	${CC} ${SHARED_FLAG} -fopenmp -fPIC -o FDTD.so FDTD.o ${LDFLAGS}
+	${CC} ${SHARED_FLAG} -fopenmp -fPIC -o FDTD_cuda.so FDTD_cuda.o ${LDFLAGS}
 	cp Grid.so ../emopt
 	cp FDTD.so ../emopt
+	cp FDTD_cuda.so ../emopt
 
 Grid.o: Grid.cpp Grid.hpp
 	${CC} -c -fPIC Grid.cpp ${CXXFLAGS} -o Grid.o ${INCLUDES}
@@ -33,6 +35,9 @@ Grid_ctypes.o: Grid.cpp Grid.hpp Grid_ctypes.cpp Grid_ctypes.hpp
 
 FDTD.o: fdtd.cpp fdtd.hpp
 	${CC} -c -fPIC fdtd.cpp ${CXXFLAGS} -o FDTD.o
+
+FDTD_cuda.o: fdtd_cuda.cpp fdtd_cuda.hpp
+	${CC} -c -fPIC fdtd_cuda.cpp ${CXXFLAGS} -o FDTD_cuda.o
 
 clean:
 	rm -f ./*.o
