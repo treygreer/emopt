@@ -41,8 +41,6 @@ __version__ = "2019.5.6"
 __maintainer__ = "Andrew Michaels"
 __status__ = "development"
 
-time_step_evals = 0
-
 class SourceArray(object):
     """A container for source arrays and its associated parameters.
 
@@ -226,7 +224,7 @@ class FDTD(MaxwellSolver):
     """
 
     def __init__(self, X, Y, Z, dx, dy, dz, wavelength, rtol=1e-6, nconv=None,
-                 min_rindex=1.0, complex_eps=False):
+                 min_rindex=1.0, complex_eps=False, num_time_steps=None):
         super(FDTD, self).__init__(3)
 
         if(nconv is None):
@@ -236,6 +234,8 @@ class FDTD(MaxwellSolver):
                             'likely too low. If the simulation does not ' \
                             'converge, increase nconv to > 2 * # processors',
                             'emopt.fdtd')
+
+        self._num_time_steps = num_time_steps  # for debugging
 
         self._dx = dx
         self._dy = dy
@@ -258,28 +258,13 @@ class FDTD(MaxwellSolver):
         dt = self._Sc * np.min([dx, dy, dz])/self._R / np.sqrt(3) * min_rindex
         self._dt = dt
 
-
-        # stencil_type=1 => box
-        # stencil_width=1 => 1 element ghosted region
-        # boundary_type=1 => ghosted simulation boundary (padded everywhere)
-
-        #self._da = da
-        ## Setup the distributed array. Currently, we need 2 for each field
-        ## component (1 for the field, and 1 for the averaged material) and 1
-        ## for each current density component
-
-        k0, j0, i0 = 0, 0, 0   # TODO: remove
-        K, J, I = Nx, Ny, Nz   # TODO: remove
-
-        print(f'(nX, nY, nZ) = {(Nx, Ny, Nz)}')
-
         # field arrays
-        self._Ex = np.zeros((K*J*I,), dtype=np.double)
-        self._Ey = np.zeros((K*J*I,), dtype=np.double)
-        self._Ez = np.zeros((K*J*I,), dtype=np.double)
-        self._Hx = np.zeros((K*J*I,), dtype=np.double)
-        self._Hy = np.zeros((K*J*I,), dtype=np.double)
-        self._Hz = np.zeros((K*J*I,), dtype=np.double)
+        self._Ex = np.zeros((Nx*Ny*Nz,), dtype=np.double)
+        self._Ey = np.zeros((Nx*Ny*Nz,), dtype=np.double)
+        self._Ez = np.zeros((Nx*Ny*Nz,), dtype=np.double)
+        self._Hx = np.zeros((Nx*Ny*Nz,), dtype=np.double)
+        self._Hy = np.zeros((Nx*Ny*Nz,), dtype=np.double)
+        self._Hz = np.zeros((Nx*Ny*Nz,), dtype=np.double)
 
         # material arrays -- global since we dont need to pass values around
         self._eps_x = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
@@ -330,7 +315,7 @@ class FDTD(MaxwellSolver):
         libFDTD.FDTD_set_wavelength(self._libfdtd, wavelength)
         libFDTD.FDTD_set_physical_dims(self._libfdtd, X, Y, Z, dx, dy, dz)
         libFDTD.FDTD_set_grid_dims(self._libfdtd, Nx, Ny, Nz)
-        libFDTD.FDTD_set_local_grid(self._libfdtd, k0, j0, i0, K, J, I)
+        libFDTD.FDTD_set_local_grid(self._libfdtd, 0, 0, 0, Nx, Ny, Nz)
         libFDTD.FDTD_set_dt(self._libfdtd, dt)
         libFDTD.FDTD_set_field_arrays(self._libfdtd,
                 self._Ex, self._Ey, self._Ez,
@@ -387,7 +372,7 @@ class FDTD(MaxwellSolver):
         # vectors. We exclude PMLs from these checks. Consider moving this to
         # C++ if this ever gets slow (possible for larger problems?)
         n_pts = nconv
-        self._conv_pts = np.arange(0, I*J*K, int(I*J*K/n_pts))
+        self._conv_pts = np.arange(0, Nx*Ny*Nz, int(Nx*Ny*Nz/n_pts))
         self._nconv = len(self._conv_pts)
 
         self._sources = []
@@ -636,45 +621,25 @@ class FDTD(MaxwellSolver):
         #   None if no overlap
         #   (global start indices), (local start indices), 
         #        (domain start indices), (widths of overlap)
-        k0, j0, i0 = 0, 0, 0   # TODO: remove
-        K, J, I = self._Nx, self._Ny, self._Nz   # TODO: remove
 
         # determine the local portion of the array that is relevant
         # First: don't do anything if this process does not contain the
         # provided source arrays
-        if(i0 >= domain.i2):       return None, None, None, None
-        elif(i0 + I <= domain.i1): return None, None, None, None
-        elif(j0 >= domain.j2):     return None, None, None, None
-        elif(j0 + J <= domain.j1): return None, None, None, None
-        elif(k0 >= domain.k2):     return None, None, None, None
-        elif(k0 + K <= domain.k1): return None, None, None, None
 
-        imin = 0; jmin = 0; kmin = 0
-        imax = 0; jmax = 0; kmax = 0
-        if(i0 + I > domain.i2): imax = domain.i2
-        else: imax = i0 + I
+        imax = domain.i2
+        jmax = domain.j2
+        kmax = domain.k2
 
-        if(j0 + J > domain.j2): jmax = domain.j2
-        else: jmax = j0 + J
-
-        if(k0 + K > domain.k2): kmax = domain.k2
-        else: kmax = k0 + K
-
-        if(i0 > domain.i1): imin = i0
-        else: imin = domain.i1
-
-        if(j0 > domain.j1): jmin = j0
-        else: jmin = domain.j1
-
-        if(k0 > domain.k1): kmin = k0
-        else: kmin = domain.k1
+        imin = domain.i1
+        jmin = domain.j1
+        kmin = domain.k1
 
         id1 = imin - domain.i1
         jd1 = jmin - domain.j1
         kd1 = kmin - domain.k1
 
         return (imin, jmin, kmin), \
-               (imin - i0, jmin - j0, kmin - k0), \
+               (imin, jmin, kmin), \
                (id1, jd1, kd1), \
                (imax - imin, jmax - jmin, kmax - kmin)
 
@@ -814,30 +779,27 @@ class FDTD(MaxwellSolver):
         eps = self._eps
         mu = self._mu
 
-        k0, j0, i0 = 0, 0, 0   # TODO: remove
-        K, J, I = self._Nx, self._Ny, self._Nz   # TODO: remove
-
-        eps.get_values(k0, k0+K, j0, j0+J, i0, i0+I,
+        eps.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
                        sx=0.5, sy=0.0, sz=-0.5,
                        arr=self._eps_x)
 
-        eps.get_values(k0, k0+K, j0, j0+J, i0, i0+I,
+        eps.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
                        sx=0.0, sy=0.5, sz=-0.5,
                        arr=self._eps_y)
 
-        eps.get_values(k0, k0+K, j0, j0+J, i0, i0+I,
+        eps.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
                        sx=0.0, sy=0.0, sz=0.0,
                        arr=self._eps_z)
 
-        mu.get_values(k0, k0+K, j0, j0+J, i0, i0+I,
+        mu.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
                       sx=0.0, sy=0.5, sz=0.0,
                       arr=self._mu_x)
 
-        mu.get_values(k0, k0+K, j0, j0+J, i0, i0+I,
+        mu.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
                        sx=0.5, sy=0.0, sz=0.0,
                        arr=self._mu_y)
 
-        mu.get_values(k0, k0+K, j0, j0+J, i0, i0+I,
+        mu.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
                        sx=0.5, sy=0.5, sz=-0.5,
                        arr=self._mu_z)
 
@@ -877,9 +839,6 @@ class FDTD(MaxwellSolver):
             eps = self._eps
             mu = self._mu
 
-            k0, j0, i0 = 0, 0, 0   # TODO: remove
-            K, J, I = self._Nx, self._Ny, self._Nz   # TODO: remove
-
             bbox = DomainCoordinates(bbox[0], bbox[1], bbox[2], bbox[3],
                                      bbox[4], bbox[5], self._dx,
                                      self._dy, self._dz)
@@ -894,7 +853,7 @@ class FDTD(MaxwellSolver):
 
             # update eps_x
             eps_x = self._eps_x
-            eps_x = np.reshape(eps_x, [I,J,K])
+            eps_x = np.reshape(eps_x, [Nz,Ny,Nx])
             eps.get_values(g_inds[2], g_inds[2]+sizes[2],
                            g_inds[1], g_inds[1]+sizes[1],
                            g_inds[0], g_inds[0]+sizes[0],
@@ -904,7 +863,7 @@ class FDTD(MaxwellSolver):
 
             # update eps_y
             eps_y = self._eps_y
-            eps_y = np.reshape(eps_y, [I,J,K])
+            eps_y = np.reshape(eps_y, [Nz,Ny,Nx])
             eps.get_values(g_inds[2], g_inds[2]+sizes[2],
                            g_inds[1], g_inds[1]+sizes[1],
                            g_inds[0], g_inds[0]+sizes[0],
@@ -914,7 +873,7 @@ class FDTD(MaxwellSolver):
 
             # update eps_z
             eps_z = self._eps_z
-            eps_z = np.reshape(eps_z, [I,J,K])
+            eps_z = np.reshape(eps_z, [Nz,Ny,Nx])
             eps.get_values(g_inds[2], g_inds[2]+sizes[2],
                            g_inds[1], g_inds[1]+sizes[1],
                            g_inds[0], g_inds[0]+sizes[0],
@@ -924,7 +883,7 @@ class FDTD(MaxwellSolver):
 
             # update mu_x
             mu_x = self._mu_x
-            mu_x = np.reshape(mu_x, [I,J,K])
+            mu_x = np.reshape(mu_x, [Nz,Ny,Nx])
             mu.get_values(g_inds[2], g_inds[2]+sizes[2],
                           g_inds[1], g_inds[1]+sizes[1],
                           g_inds[0], g_inds[0]+sizes[0],
@@ -934,7 +893,7 @@ class FDTD(MaxwellSolver):
 
             # update mu_y
             mu_y = self._mu_y
-            mu_y = np.reshape(mu_y, [I,J,K])
+            mu_y = np.reshape(mu_y, [Nz,Ny,Nx])
             mu.get_values(g_inds[2], g_inds[2]+sizes[2],
                           g_inds[1], g_inds[1]+sizes[1],
                           g_inds[0], g_inds[0]+sizes[0],
@@ -944,7 +903,7 @@ class FDTD(MaxwellSolver):
 
             # update mu_z
             mu_z = self._mu_z
-            mu_z = np.reshape(mu_z, [I,J,K])
+            mu_z = np.reshape(mu_z, [Nz,Ny,Nx])
             mu.get_values(g_inds[2], g_inds[2]+sizes[2],
                           g_inds[1], g_inds[1]+sizes[1],
                           g_inds[0], g_inds[0]+sizes[0],
@@ -964,13 +923,8 @@ class FDTD(MaxwellSolver):
         odz = R/self._dz
         Nx, Ny, Nz = self._Nx, self._Ny, self._Nz
 
-        global time_step_evals
-
         # define time step
         dt = self._dt
-
-        k0, j0, i0 = 0, 0, 0   # TODO: remove
-        K, J, I = Nx, Ny, Nz   # TODO: remove
 
         # Reset field values, pmls, etc
         libFDTD.FDTD_reset_pml(self._libfdtd)
@@ -1007,7 +961,8 @@ class FDTD(MaxwellSolver):
 
         n = 0
         import matplotlib.pyplot as plt
-        while(A_change > amp_rtol or phi_change > phi_rtol or \
+        while(self._num_time_steps or \
+              A_change > amp_rtol or phi_change > phi_rtol or \
               np.isnan(A_change) or np.isinf(A_change) or \
               np.isnan(phi_change) or np.isinf(phi_change)):
 
@@ -1015,12 +970,15 @@ class FDTD(MaxwellSolver):
                 warning_message('Maximum number of time steps exceeded.',
                                 'emopt.fdtd')
                 break
-
-            time_step_evals += 1
+                
+            if(n == self._num_time_steps):
+                warning_message('Specified number of time steps executed.',
+                                'emopt.fdtd')
+                break
 
             libFDTD.FDTD_update_H(self._libfdtd, n, n*dt)
 
-            if True:
+            if False:
                 print(f'_N=({self._Nz, self._Ny, self._Nx})')
                 fig,ax=plt.subplots(self._Nz,6)
                 fig.canvas.set_window_title('cuda after H update')
@@ -1040,7 +998,7 @@ class FDTD(MaxwellSolver):
 
             libFDTD.FDTD_update_E(self._libfdtd, n, (n+0.5)*dt)
 
-            if True:
+            if False:
                 print(f'_N=({self._Nz, self._Ny, self._Nx})')
                 fig,ax=plt.subplots(self._Nz,6)
                 fig.canvas.set_window_title('cuda after E update')
@@ -1114,7 +1072,9 @@ class FDTD(MaxwellSolver):
                 A_change = np.linalg.norm(A1-A0)/np.linalg.norm(A0)
                 phi_change = np.linalg.norm(phi1-phi0)/np.linalg.norm(phi0)
 
-                if(self.verbose > 1 and n > 2*Tn):
+                if(self.verbose > 1):  # and n > 2*Tn):
+                    print(f'phi1={phi1}')
+                    print(f'A1={A1}')
                     print('time step: {0: <8d} Delta A: {1: <12.4e} ' \
                           'Delta Phi: {2: <12.4e}'.format(n, A_change, phi_change))
 
@@ -1123,6 +1083,8 @@ class FDTD(MaxwellSolver):
                 p += 1
 
             n += 1
+
+        print(f'executed {n} time steps')
 
         libFDTD.FDTD_capture_t0_fields(self._libfdtd)
 

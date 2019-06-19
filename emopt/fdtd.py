@@ -229,7 +229,7 @@ class FDTD(MaxwellSolver):
     """
 
     def __init__(self, X, Y, Z, dx, dy, dz, wavelength, rtol=1e-6, nconv=None,
-                 min_rindex=1.0, complex_eps=False):
+                 min_rindex=1.0, complex_eps=False, num_time_steps=None):
         super(FDTD, self).__init__(3)
 
         if(nconv is None):
@@ -239,6 +239,8 @@ class FDTD(MaxwellSolver):
                             'likely too low. If the simulation does not ' \
                             'converge, increase nconv to > 2 * # processors',
                             'emopt.fdtd')
+
+        self._num_time_steps = num_time_steps  # for debugging
 
         self._dx = dx
         self._dy = dy
@@ -1036,7 +1038,8 @@ class FDTD(MaxwellSolver):
 
         n = 0
         import matplotlib.pyplot as plt
-        while(A_change > amp_rtol or phi_change > phi_rtol or \
+        while(self._num_time_steps or \
+              A_change > amp_rtol or phi_change > phi_rtol or \
               np.isnan(A_change) or np.isinf(A_change) or \
               np.isnan(phi_change) or np.isinf(phi_change)):
 
@@ -1045,6 +1048,10 @@ class FDTD(MaxwellSolver):
                                 'emopt.fdtd')
                 break
 
+            if(n == self._num_time_steps):
+                warning_message('Specified number of time steps executed.',
+                                'emopt.fdtd')
+                break
 
             libFDTD.FDTD_update_H(self._libfdtd, n, n*dt)
 
@@ -1052,7 +1059,7 @@ class FDTD(MaxwellSolver):
             self._gc.update_local_vector(self._Hy)
             self._gc.update_local_vector(self._Hz)
 
-            if True:
+            if False:
                 print(f'_N=({self._Nz, self._Ny, self._Nx})')
                 fig,ax=plt.subplots(self._Nz,6)
                 fig.canvas.set_window_title('nocuda after H update')
@@ -1076,7 +1083,7 @@ class FDTD(MaxwellSolver):
             self._gc.update_local_vector(self._Ey)
             self._gc.update_local_vector(self._Ez)
 
-            if True:
+            if False:
                 print(f'_N=({self._Nz, self._Ny, self._Nx})')
                 fig,ax=plt.subplots(self._Nz,6)
                 fig.canvas.set_window_title('nocuda after E update')
