@@ -79,15 +79,6 @@ void fdtd::FDTD::set_grid_dims(int Nx, int Ny, int Nz)
     _Nz = Nz;
 }
 
-
-void fdtd::FDTD::set_local_grid(int k0, int j0, int i0, int K, int J, int I)
-{
-    _i0 = i0; _j0 = j0; _k0 = k0;
-    _I = I; _J = J; _K = K;
-
-}
-
-
 void fdtd::FDTD::set_wavelength(double wavelength)
 {
     _wavelength = wavelength;
@@ -133,42 +124,37 @@ void fdtd::FDTD::update_H(int n, double t)
         pml_ymin = _w_pml_y0, pml_ymax = _Ny-_w_pml_y1,
         pml_zmin = _w_pml_z0, pml_zmax = _Nz-_w_pml_z1;
 
-    int ind_ijk, ind_ip1jk, ind_ijp1k, ind_ijkp1, ind_global,
+    int ind_ijk, ind_ip1jk, ind_ijp1k, ind_ijkp1,
         ind_pml, ind_src, i0s, j0s, k0s, Is, Js, Ks,
         ind_pml_param;
 
     double dExdy, dExdz, dEydx, dEydz, dEzdx, dEzdy;
     complex128 *Mx, *My, *Mz;
 
-    // Setup the fields on the simulation boundary based on the boundary conditions
-    // these are flags to use zero for wrapped 0-index fields
-    for(int i = 0; i < _I; i++) {
-        for(int j = 0; j < _J; j++) {
-            for(int k = 0; k < _K; k++) {
+    for(int i = 0; i < _Nz; i++) {
+        int kill_zwrap = (_bc[2] != 'P' && i == _Nz-1) ? 1 : 0;
+	int ip1 = i==_Nz-1 ? 0 : i+1;
+        for(int j = 0; j < _Ny; j++) {
+	    int kill_ywrap = (_bc[1] != 'P' && j == _Ny-1) ? 1 : 0;
+	    int jp1 = j==_Ny-1 ? 0 : j+1;
+	    for(int k = 0; k < _Nx; k++) {
 		int kill_xwrap = (_bc[0] != 'P' && k == _Nx-1) ? 1 : 0;
-		int kill_ywrap = (_bc[1] != 'P' && j == _Ny-1) ? 1 : 0;
-		int kill_zwrap = (_bc[2] != 'P' && i == _Nz-1) ? 1 : 0;
+		int kp1 = k==_Nx-1 ? 0 : k+1;
 
-		int ip1 = i==_I-1 ? 0 : i+1;
-		int jp1 = j==_J-1 ? 0 : j+1;
-		int kp1 = k==_K-1 ? 0 : k+1;
+                ind_ijk =   (i+0)*(_Ny+0)*(_Nx+0) + (j+0)*(_Nx+0) + k+0;
+                ind_ijp1k = (i+0)*(_Ny+0)*(_Nx+0) + (jp1)*(_Nx+0) + k+0;
+                ind_ip1jk = (ip1)*(_Ny+0)*(_Nx+0) + (j+0)*(_Nx+0) + k+0;
+                ind_ijkp1 = (i+0)*(_Ny+0)*(_Nx+0) + (j+0)*(_Nx+0) + kp1;
 
-                ind_ijk =   (i+0)*(_J+0)*(_K+0) + (j+0)*(_K+0) + k+0;
-                ind_ijp1k = (i+0)*(_J+0)*(_K+0) + (jp1)*(_K+0) + k+0;
-                ind_ip1jk = (ip1)*(_J+0)*(_K+0) + (j+0)*(_K+0) + k+0;
-                ind_ijkp1 = (i+0)*(_J+0)*(_K+0) + (j+0)*(_K+0) + kp1;
-
-		assert(ind_ijk >= 0 && ind_ijk < _I*_J*_K);
-		assert(ind_ip1jk >= 0 && ind_ip1jk < _I*_J*_K);
-		assert(ind_ijp1k >= 0 && ind_ijp1k < _I*_J*_K);
-		assert(ind_ijkp1 >= 0 && ind_ijkp1 < _I*_J*_K);
-
-                ind_global = i*_J*_K + j*_K + k;
+		assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+		assert(ind_ip1jk >= 0 && ind_ip1jk < _Nz*_Ny*_Nx);
+		assert(ind_ijp1k >= 0 && ind_ijp1k < _Nz*_Ny*_Nx);
+		assert(ind_ijkp1 >= 0 && ind_ijkp1 < _Nz*_Ny*_Nx);
 
                 // compute prefactors
-                dt_by_mux = _dt/_mu_x[ind_global].real;
-                dt_by_muy = _dt/_mu_y[ind_global].real;
-                dt_by_muz = _dt/_mu_z[ind_global].real;
+                dt_by_mux = _dt/_mu_x[ind_ijk].real;
+                dt_by_muy = _dt/_mu_y[ind_ijk].real;
+                dt_by_muz = _dt/_mu_z[ind_ijk].real;
 
                 // Update Hx
                 dEzdy = ody * ((kill_ywrap ? 0 : _Ez[ind_ijp1k])  - _Ez[ind_ijk]);
@@ -192,12 +178,12 @@ void fdtd::FDTD::update_H(int n, double t)
                                (dExdy - dEydx);
 
                 // Do PML updates
-                if(k + _k0 < pml_xmin) {
+                if(k < pml_xmin) {
                     // get index in PML array
-                    ind_pml = i*_J*(pml_xmin - _k0) +j*(pml_xmin - _k0) + k;
+                    ind_pml = i*_Ny*(pml_xmin) +j*(pml_xmin) + k;
 
                     // get PML coefficients
-                    ind_pml_param = pml_xmin - k - _k0 - 1;
+                    ind_pml_param = pml_xmin - k - 1;
                     kappa = _kappa_H_x[ind_pml_param];
                     b = _bHx[ind_pml_param];
                     C = _cHx[ind_pml_param];
@@ -210,11 +196,11 @@ void fdtd::FDTD::update_H(int n, double t)
                     _Hy[ind_ijk] = _Hy[ind_ijk] + dt_by_muy * (_pml_Ezx0[ind_pml]-dEzdx+dEzdx/kappa);
 
                 }
-                else if(k + _k0 >= pml_xmax) {
-                    ind_pml = i*_J*(_k0 + _K - pml_xmax) + j*(_k0 + _K - pml_xmax) + k + _k0 - pml_xmax;
+                else if(k  >= pml_xmax) {
+                    ind_pml = i*_Ny*(_Nx - pml_xmax) + j*(_Nx - pml_xmax) + k - pml_xmax;
 
                     // get pml coefficients
-                    ind_pml_param = k+_k0 - pml_xmax + _w_pml_x0;
+                    ind_pml_param = k - pml_xmax + _w_pml_x0;
                     kappa = _kappa_H_x[ind_pml_param];
                     b = _bHx[ind_pml_param];
                     C = _cHx[ind_pml_param];
@@ -226,11 +212,11 @@ void fdtd::FDTD::update_H(int n, double t)
                     _Hy[ind_ijk] = _Hy[ind_ijk] + dt_by_muy * (_pml_Ezx1[ind_pml]-dEzdx+dEzdx/kappa);
                 }
 
-                if(j + _j0 < pml_ymin) {
-                    ind_pml = i*(pml_ymin - _j0)*_K +j*_K + k;
+                if(j < pml_ymin) {
+                    ind_pml = i*pml_ymin*_Nx +j*_Nx + k;
 
                     // compute coefficients
-                    ind_pml_param = pml_ymin - j - _j0 - 1;
+                    ind_pml_param = pml_ymin - j - 1;
                     kappa = _kappa_H_y[ind_pml_param];
                     b = _bHy[ind_pml_param];
                     C = _cHy[ind_pml_param];
@@ -241,11 +227,11 @@ void fdtd::FDTD::update_H(int n, double t)
                     _Hz[ind_ijk] = _Hz[ind_ijk] + dt_by_muz * (_pml_Exy0[ind_pml]-dExdy+dExdy/kappa);
                     _Hx[ind_ijk] = _Hx[ind_ijk] - dt_by_mux * (_pml_Ezy0[ind_pml]-dEzdy+dEzdy/kappa);
                 }
-                else if(j + _j0 >= pml_ymax) {
-                    ind_pml = i*(_j0 + _J - pml_ymax)*_K +(_j0 + j - pml_ymax)*_K + k;
+                else if(j >= pml_ymax) {
+                    ind_pml = i*(_Ny - pml_ymax)*_Nx +(j - pml_ymax)*_Nx + k;
 
                     // compute coefficients
-                    ind_pml_param = j+_j0 - pml_ymax + _w_pml_y0;
+                    ind_pml_param = j - pml_ymax + _w_pml_y0;
                     kappa = _kappa_H_y[ind_pml_param];
                     b = _bHy[ind_pml_param];
                     C = _cHy[ind_pml_param];
@@ -257,11 +243,11 @@ void fdtd::FDTD::update_H(int n, double t)
                     _Hx[ind_ijk] = _Hx[ind_ijk] - dt_by_mux * (_pml_Ezy1[ind_pml]-dEzdy+dEzdy/kappa);
                 }
 
-                if(i + _i0 < pml_zmin) {
-                    ind_pml = i*_J*_K +j*_K + k;
+                if(i < pml_zmin) {
+                    ind_pml = i*_Ny*_Nx +j*_Nx + k;
 
                     // get coefficients
-                    ind_pml_param = pml_zmin - i - _i0 - 1;
+                    ind_pml_param = pml_zmin - i - 1;
                     kappa = _kappa_H_z[ind_pml_param];
                     b = _bHz[ind_pml_param];
                     C = _cHz[ind_pml_param];
@@ -272,11 +258,11 @@ void fdtd::FDTD::update_H(int n, double t)
                     _Hx[ind_ijk] = _Hx[ind_ijk] + dt_by_mux * (_pml_Eyz0[ind_pml]-dEydz+dEydz/kappa);
                     _Hy[ind_ijk] = _Hy[ind_ijk] - dt_by_muy * (_pml_Exz0[ind_pml]-dExdz+dExdz/kappa);
                 }
-                else if(i + _i0 > pml_zmax) {
-                    ind_pml = (_i0 + i - pml_zmax)*_J*_K +j*_K + k;
+                else if(i > pml_zmax) {
+                    ind_pml = (i - pml_zmax)*_Ny*_Nx +j*_Nx + k;
 
                     // get coefficients
-                    ind_pml_param = i+_i0 - pml_zmax + _w_pml_z0;
+                    ind_pml_param = i - pml_zmax + _w_pml_z0;
                     kappa = _kappa_H_z[ind_pml_param];
                     b = _bHz[ind_pml_param];
                     C = _cHz[ind_pml_param];
@@ -304,16 +290,14 @@ void fdtd::FDTD::update_H(int n, double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_J)*(_K) + (j+j0s)*(_K) + k + k0s;
-                    ind_global = (i+i0s)*_J*_K + (j+j0s)*_K + k+k0s;
+                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
                     ind_src = i*Js*Ks + j*Ks + k;
 
-		    assert(ind_ijk >= 0 && ind_ijk < _I*_J*_K);
-		    assert(ind_global >= 0 && ind_global < _I*_J*_K);
-		    assert(ind_src >= 0 && ind_src < _I*_J*_K);
+		    assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+		    assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
 
                     src_t = src_func_t(n, t, Mx[ind_src].imag);
-                    _Hx[ind_ijk] = _Hx[ind_ijk] + src_t * Mx[ind_src].real * _dt / _mu_x[ind_global].real;
+                    _Hx[ind_ijk] = _Hx[ind_ijk] + src_t * Mx[ind_src].real * _dt / _mu_x[ind_ijk].real;
                 }
             }
         }
@@ -324,16 +308,14 @@ void fdtd::FDTD::update_H(int n, double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_J)*(_K) + (j+j0s)*(_K) + k + k0s;
-                    ind_global = (i+i0s)*_J*_K + (j+j0s)*_K + k+k0s;
+                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
                     ind_src = i*Js*Ks + j*Ks + k;
 
-		    assert(ind_ijk >= 0 && ind_ijk < _I*_J*_K);
-		    assert(ind_global >= 0 && ind_global < _I*_J*_K);
-		    assert(ind_src >= 0 && ind_src < _I*_J*_K);
+		    assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+		    assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
 
                     src_t = src_func_t(n, t, My[ind_src].imag);
-                    _Hy[ind_ijk] = _Hy[ind_ijk] + src_t * My[ind_src].real * _dt / _mu_y[ind_global].real;
+                    _Hy[ind_ijk] = _Hy[ind_ijk] + src_t * My[ind_src].real * _dt / _mu_y[ind_ijk].real;
                 }
             }
         }
@@ -344,16 +326,14 @@ void fdtd::FDTD::update_H(int n, double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_J)*(_K) + (j+j0s)*(_K) + k + k0s;
-                    ind_global = (i+i0s)*_J*_K + (j+j0s)*_K + k+k0s;
+                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
                     ind_src = i*Js*Ks + j*Ks + k;
 
-		    assert(ind_ijk >= 0 && ind_ijk < _I*_J*_K);
-		    assert(ind_global >= 0 && ind_global < _I*_J*_K);
-		    assert(ind_src >= 0 && ind_src < _I*_J*_K);
+		    assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+		    assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
 
                     src_t = src_func_t(n, t, Mz[ind_src].imag);
-                    _Hz[ind_ijk] = _Hz[ind_ijk] + src_t * Mz[ind_src].real * _dt / _mu_z[ind_global].real;
+                    _Hz[ind_ijk] = _Hz[ind_ijk] + src_t * Mz[ind_src].real * _dt / _mu_z[ind_ijk].real;
                 }
             }
         }
@@ -374,7 +354,7 @@ void fdtd::FDTD::update_E(int n, double t)
         pml_ymin = _w_pml_y0, pml_ymax = _Ny-_w_pml_y1,
         pml_zmin = _w_pml_z0, pml_zmax = _Nz-_w_pml_z1;
 
-    int ind_ijk, ind_im1jk, ind_ijm1k, ind_ijkm1, ind_global,
+    int ind_ijk, ind_im1jk, ind_ijm1k, ind_ijkm1,
         ind_pml, ind_src, i0s, j0s, k0s, Is, Js, Ks,
         ind_pml_param;
 
@@ -382,38 +362,37 @@ void fdtd::FDTD::update_E(int n, double t)
     complex128 *Jx, *Jy, *Jz;
     enum action { ACTION_NOP, ACTION_ZERO, ACTION_FLIP, ACTION_COPY };
 
-    for(int i = 0; i < _I; i++) {
-        for(int j = 0; j < _J; j++) {
-            for(int k = 0; k < _K; k++) {
+    for(int i = 0; i < _Nz; i++) {
+        int action_zwrap = (_bc[2] == 'P' || i != 0 ? ACTION_NOP :
+			    _bc[2] == '0'           ? ACTION_ZERO :
+			    _bc[2] == 'E'           ? ACTION_FLIP : ACTION_COPY);
+	int im1 = i==0 ? _Nz-1 : i-1;
+        for(int j = 0; j < _Ny; j++) {
+	   int action_ywrap = (_bc[1] == 'P' || j != 0 ? ACTION_NOP :
+			       _bc[1] == '0'           ? ACTION_ZERO :
+			       _bc[1] == 'E'           ? ACTION_FLIP : ACTION_COPY);
+	   int jm1 = j==0 ? _Ny-1 : j-1;
+	   for(int k = 0; k < _Nx; k++) {
 		int action_xwrap = (_bc[0] == 'P' || k != 0 ? ACTION_NOP :
 				    _bc[0] == '0'           ? ACTION_ZERO :
 				    _bc[0] == 'E'           ? ACTION_FLIP : ACTION_COPY);
-		int action_ywrap = (_bc[1] == 'P' || j != 0 ? ACTION_NOP :
-				    _bc[1] == '0'           ? ACTION_ZERO :
-				    _bc[1] == 'E'           ? ACTION_FLIP : ACTION_COPY);
-		int action_zwrap = (_bc[2] == 'P' || i != 0 ? ACTION_NOP :
-				    _bc[2] == '0'           ? ACTION_ZERO :
-				    _bc[2] == 'E'           ? ACTION_FLIP : ACTION_COPY);
-		int im1 = i==0 ? _I-1 : i-1;
-		int jm1 = j==0 ? _J-1 : j-1;
-		int km1 = k==0 ? _K-1 : k-1;
-                ind_ijk   = (i-0)*(_J)*(_K) + (j-0)*(_K) + k-0;
-                ind_ijm1k = (i-0)*(_J)*(_K) + (jm1)*(_K) + k-0;
-                ind_im1jk = (im1)*(_J)*(_K) + (j-0)*(_K) + k-0;
-                ind_ijkm1 = (i-0)*(_J)*(_K) + (j-0)*(_K) + km1;
+		int km1 = k==0 ? _Nx-1 : k-1;
 
-                ind_global = i*_J*_K + j*_K + k;
+                ind_ijk   = (i-0)*(_Ny)*(_Nx) + (j-0)*(_Nx) + k-0;
+                ind_ijm1k = (i-0)*(_Ny)*(_Nx) + (jm1)*(_Nx) + k-0;
+                ind_im1jk = (im1)*(_Ny)*(_Nx) + (j-0)*(_Nx) + k-0;
+                ind_ijkm1 = (i-0)*(_Ny)*(_Nx) + (j-0)*(_Nx) + km1;
 
-		assert(ind_ijk >= 0 && ind_ijk < _I*_J*_K);
-		assert(ind_im1jk >= 0 && ind_im1jk < _I*_J*_K);
-		assert(ind_ijm1k >= 0 && ind_ijm1k < _I*_J*_K);
-		assert(ind_ijkm1 >= 0 && ind_ijkm1 < _I*_J*_K);
-		assert(ind_global >= 0 && ind_global < _I*_J*_K);
+
+		assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+		assert(ind_im1jk >= 0 && ind_im1jk < _Nz*_Ny*_Nx);
+		assert(ind_ijm1k >= 0 && ind_ijm1k < _Nz*_Ny*_Nx);
+		assert(ind_ijkm1 >= 0 && ind_ijkm1 < _Nz*_Ny*_Nx);
 
                 a_x = 1.0; a_y = 1.0; a_z = 1.0;
-                b_x = _dt/_eps_x[ind_global].real;
-                b_y = _dt/_eps_y[ind_global].real;
-                b_z = _dt/_eps_z[ind_global].real;
+                b_x = _dt/_eps_x[ind_ijk].real;
+                b_y = _dt/_eps_y[ind_ijk].real;
+                b_z = _dt/_eps_z[ind_ijk].real;
 
                 // Update Ex
                 dHzdy = ody*(_Hz[ind_ijk] - (action_ywrap == ACTION_ZERO ? 0 :
@@ -447,11 +426,11 @@ void fdtd::FDTD::update_E(int n, double t)
 
 
                 // Do PML updates
-                if(k + _k0 < pml_xmin) {
-                    ind_pml = i*_J*(pml_xmin-_k0) +j*(pml_xmin-_k0) + k;
+                if(k < pml_xmin) {
+                    ind_pml = i*_Ny*(pml_xmin) +j*(pml_xmin) + k;
 
                     // get PML coefficients
-                    ind_pml_param = pml_xmin - k - _k0 - 1;
+                    ind_pml_param = pml_xmin - k - 1;
                     kappa = _kappa_E_x[ind_pml_param];
                     b = _bEx[ind_pml_param];
                     C = _cEx[ind_pml_param];
@@ -463,11 +442,11 @@ void fdtd::FDTD::update_E(int n, double t)
                     _Ey[ind_ijk] = _Ey[ind_ijk] - (_pml_Hzx0[ind_pml]-dHzdx+dHzdx/kappa) * b_y;
 
                 }
-                else if(k + _k0 >= pml_xmax) {
-                    ind_pml = i*_J*(_k0 + _K - pml_xmax) +j*(_k0 + _K - pml_xmax) + k + _k0 - pml_xmax;
+                else if(k >= pml_xmax) {
+                    ind_pml = i*_Ny*(_Nx - pml_xmax) +j*(_Nx - pml_xmax) + k - pml_xmax;
 
                     // get coefficients
-                    ind_pml_param = k+_k0 - pml_xmax + _w_pml_x0;
+                    ind_pml_param = k - pml_xmax + _w_pml_x0;
                     kappa = _kappa_E_x[ind_pml_param];
                     b = _bEx[ind_pml_param];
                     C = _cEx[ind_pml_param];
@@ -479,11 +458,11 @@ void fdtd::FDTD::update_E(int n, double t)
                     _Ey[ind_ijk] = _Ey[ind_ijk] - (_pml_Hzx1[ind_pml]-dHzdx+dHzdx/kappa) * b_y;
                 }
 
-                if(j + _j0 < pml_ymin) {
-                    ind_pml = i*(pml_ymin - _j0)*_K +j*_K + k;
+                if(j < pml_ymin) {
+                    ind_pml = i*pml_ymin*_Nx +j*_Nx + k;
 
                     // get coefficients
-                    ind_pml_param = pml_ymin - j - _j0 - 1;
+                    ind_pml_param = pml_ymin - j - 1;
                     kappa = _kappa_E_y[ind_pml_param];
                     b = _bEy[ind_pml_param];
                     C = _cEy[ind_pml_param];
@@ -494,11 +473,11 @@ void fdtd::FDTD::update_E(int n, double t)
                     _Ez[ind_ijk] = _Ez[ind_ijk] - (_pml_Hxy0[ind_pml]-dHxdy+dHxdy/kappa) * b_z;
                     _Ex[ind_ijk] = _Ex[ind_ijk] + (_pml_Hzy0[ind_pml]-dHzdy+dHzdy/kappa) * b_x;
                 }
-                else if(j + _j0 >= pml_ymax) {
-                    ind_pml = i*(_j0 + _J - pml_ymax)*_K +(_j0 + j - pml_ymax)*_K + k;
+                else if(j >= pml_ymax) {
+                    ind_pml = i*(_Ny - pml_ymax)*_Nx +(j - pml_ymax)*_Nx + k;
 
                     // get coefficients
-                    ind_pml_param = j+_j0 - pml_ymax + _w_pml_y0;
+                    ind_pml_param = j - pml_ymax + _w_pml_y0;
                     kappa = _kappa_E_y[ind_pml_param];
                     b = _bEy[ind_pml_param];
                     C = _cEy[ind_pml_param];
@@ -510,11 +489,11 @@ void fdtd::FDTD::update_E(int n, double t)
                     _Ex[ind_ijk] = _Ex[ind_ijk] + (_pml_Hzy1[ind_pml]-dHzdy+dHzdy/kappa) * b_x;
                 }
 
-                if(i + _i0 < pml_zmin) {
-                    ind_pml = i*_J*_K +j*_K + k;
+                if(i < pml_zmin) {
+                    ind_pml = i*_Ny*_Nx +j*_Nx + k;
 
                     // get coefficients
-                    ind_pml_param = pml_zmin - i - _i0 - 1;
+                    ind_pml_param = pml_zmin - i - 1;
                     kappa = _kappa_E_z[ind_pml_param];
                     b = _bEz[ind_pml_param];
                     C = _cEz[ind_pml_param];
@@ -525,11 +504,11 @@ void fdtd::FDTD::update_E(int n, double t)
                     _Ex[ind_ijk] = _Ex[ind_ijk] - (_pml_Hyz0[ind_pml]-dHydz+dHydz/kappa) * b_x;
                     _Ey[ind_ijk] = _Ey[ind_ijk] + (_pml_Hxz0[ind_pml]-dHxdz+dHxdz/kappa) * b_y;
                 }
-                else if(i + _i0 > pml_zmax) {
-                    ind_pml = (_i0 + i - pml_zmax)*_J*_K +j*_K + k;
+                else if(i > pml_zmax) {
+                    ind_pml = (i - pml_zmax)*_Ny*_Nx +j*_Nx + k;
 
                     // compute coefficients
-                    ind_pml_param = i + _i0 - pml_zmax + _w_pml_z0;
+                    ind_pml_param = i - pml_zmax + _w_pml_z0;
                     kappa = _kappa_E_z[ind_pml_param];
                     b = _bEz[ind_pml_param];
                     C = _cEz[ind_pml_param];
@@ -556,11 +535,10 @@ void fdtd::FDTD::update_E(int n, double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk    = (i+i0s)*(_J)*(_K) + (j+j0s)*(_K) + k + k0s;
-                    ind_global = (i+i0s)*_J*_K + (j+j0s)*_K + k+k0s;
+                    ind_ijk    = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
                     ind_src = i*Js*Ks + j*Ks + k;
 
-                    b_x = _dt/_eps_x[ind_global].real;
+                    b_x = _dt/_eps_x[ind_ijk].real;
 
                     src_t = src_func_t(n, t, Jx[ind_src].imag);
                     _Ex[ind_ijk] = _Ex[ind_ijk] - src_t * Jx[ind_src].real * b_x;
@@ -574,11 +552,10 @@ void fdtd::FDTD::update_E(int n, double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_J)*(_K) + (j+j0s)*(_K) + k + k0s;
-                    ind_global = (i+i0s)*_J*_K + (j+j0s)*_K + k+k0s;
+                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
                     ind_src = i*Js*Ks + j*Ks + k;
 
-                    b_y = _dt/_eps_y[ind_global].real;
+                    b_y = _dt/_eps_y[ind_ijk].real;
 
                     src_t = src_func_t(n, t, Jy[ind_src].imag);
                     _Ey[ind_ijk] = _Ey[ind_ijk] - src_t * Jy[ind_src].real * b_y;
@@ -592,11 +569,10 @@ void fdtd::FDTD::update_E(int n, double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_J)*(_K) + (j+j0s)*(_K) + k + k0s;
-                    ind_global = (i+i0s)*_J*_K + (j+j0s)*_K + k+k0s;
+                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
                     ind_src = i*Js*Ks + j*Ks + k;
 
-                    b_z = _dt/_eps_z[ind_global].real;
+                    b_z = _dt/_eps_z[ind_ijk].real;
 
                     src_t = src_func_t(n, t, Jz[ind_src].imag);
                     _Ez[ind_ijk] = _Ez[ind_ijk] - src_t * Jz[ind_src].real * b_z;
@@ -636,8 +612,8 @@ void fdtd::FDTD::build_pml()
         zmin = _w_pml_z0, zmax = _Nz-_w_pml_z1;
 
     // touches xmin boudary
-    if(_k0 < xmin) {
-        N = _I * _J * (xmin - _k0);
+    if(0 < xmin) {
+        N = _Nz * _Ny * xmin;
 
         // Clean up old arrays and allocate new ones
         delete [] _pml_Eyx0; _pml_Eyx0 = NULL;
@@ -652,8 +628,8 @@ void fdtd::FDTD::build_pml()
     }
 
     // touches xmax boundary
-    if(_k0 +_K > xmax) {
-        N = _I * _J * (_k0  + _K - xmax);
+    if(_Nx > xmax) {
+        N = _Nz * _Ny * (_Nx - xmax);
 
         // Clean up old arrays and allocate new ones
         delete [] _pml_Eyx1; _pml_Eyx1 = NULL;
@@ -668,8 +644,8 @@ void fdtd::FDTD::build_pml()
     }
 
     // touches ymin boundary
-    if(_j0 < ymin) {
-        N = _I * _K * (ymin - _j0);
+    if(0 < ymin) {
+        N = _Nz * _Nx * ymin;
 
         delete [] _pml_Exy0; _pml_Exy0 = NULL;
         delete [] _pml_Ezy0; _pml_Ezy0 = NULL;
@@ -683,8 +659,8 @@ void fdtd::FDTD::build_pml()
     }
 
     // touches ymax boundary
-    if(_j0 + _J > ymax) {
-        N = _I * _K * (_j0 + _J - ymax);
+    if(_Ny > ymax) {
+        N = _Nz * _Nx * (_Ny - ymax);
 
         delete [] _pml_Exy1; _pml_Exy1 = NULL;
         delete [] _pml_Ezy1; _pml_Ezy1 = NULL;
@@ -698,8 +674,8 @@ void fdtd::FDTD::build_pml()
     }
 
     // touches zmin boundary
-    if(_i0 < zmin) {
-        N = _J * _K * (zmin - _i0);
+    if(0 < zmin) {
+        N = _Ny * _Nx * zmin;
 
         delete [] _pml_Exz0; _pml_Exz0 = NULL;
         delete [] _pml_Eyz0; _pml_Eyz0 = NULL;
@@ -713,8 +689,8 @@ void fdtd::FDTD::build_pml()
     }
 
     // touches zmax boundary
-    if(_i0 + _I > zmax) {
-        N = _J * _K * (_i0 + _I - zmax);
+    if(_Nz > zmax) {
+        N = _Ny * _Nx * (_Nz - zmax);
 
         delete [] _pml_Hxz1; _pml_Hxz1 = NULL;
         delete [] _pml_Hyz1; _pml_Hyz1 = NULL;
@@ -739,8 +715,8 @@ void fdtd::FDTD::reset_pml()
         zmin = _w_pml_z0, zmax = _Nz-_w_pml_z1;
 
     // touches xmin boudary
-    if(_k0 < xmin) {
-        N = _I * _J * (xmin - _k0);
+    if(0 < xmin) {
+        N = _Nz * _Ny * xmin;
         std::fill(_pml_Eyx0, _pml_Eyx0 + N, 0);
         std::fill(_pml_Ezx0, _pml_Ezx0 + N, 0);
         std::fill(_pml_Hyx0, _pml_Hyx0 + N, 0);
@@ -748,8 +724,8 @@ void fdtd::FDTD::reset_pml()
     }
 
     // touches xmax boundary
-    if(_k0 +_K > xmax) {
-        N = _I * _J * (_k0  + _K - xmax);
+    if(0 +_Nx > xmax) {
+        N = _Nz * _Ny * (_Nx - xmax);
 
         std::fill(_pml_Eyx1, _pml_Eyx1 + N, 0);
         std::fill(_pml_Ezx1, _pml_Ezx1 + N, 0);
@@ -758,8 +734,8 @@ void fdtd::FDTD::reset_pml()
     }
 
     // touches ymin boundary
-    if(_j0 < ymin) {
-        N = _I * _K * (ymin - _j0);
+    if(0 < ymin) {
+        N = _Nz * _Nx * ymin;
 
         std::fill(_pml_Exy0, _pml_Exy0 + N, 0);
         std::fill(_pml_Ezy0, _pml_Ezy0 + N, 0);
@@ -768,8 +744,8 @@ void fdtd::FDTD::reset_pml()
     }
 
     // touches ymax boundary
-    if(_j0 + _J > ymax) {
-        N = _I * _K * (_j0 + _J - ymax);
+    if(_Ny > ymax) {
+        N = _Nz * _Nx * (_Ny - ymax);
 
         std::fill(_pml_Exy1, _pml_Exy1 + N, 0);
         std::fill(_pml_Ezy1, _pml_Ezy1 + N, 0);
@@ -778,8 +754,8 @@ void fdtd::FDTD::reset_pml()
     }
 
     // touches zmin boundary
-    if(_i0 < zmin) {
-        N = _J * _K * (zmin - _i0);
+    if(0 < zmin) {
+        N = _Ny * _Nx * zmin;
 
         std::fill(_pml_Exz0, _pml_Exz0 + N, 0);
         std::fill(_pml_Eyz0, _pml_Eyz0 + N, 0);
@@ -788,8 +764,8 @@ void fdtd::FDTD::reset_pml()
     }
 
     // touches zmax boundary
-    if(_i0 + _I > zmax) {
-        N = _J * _K * (_i0 + _I - zmax);
+    if(_Nz > zmax) {
+        N = _Ny * _Nx * (_Nz - zmax);
 
         std::fill(_pml_Exz1, _pml_Exz1 + N, 0);
         std::fill(_pml_Eyz1, _pml_Eyz1 + N, 0);
@@ -1056,22 +1032,21 @@ _Hx_t1 = Hx_t1; _Hy_t1 = Hy_t1; _Hz_t1 = Hz_t1;
 
 void fdtd::FDTD::capture_t0_fields()
 {
-    int ind_local, ind_global;
+    int ind_local;
 
-    for(int i = 0; i < _I; i++) {
-        for(int j = 0; j < _J; j++) {
-            for(int k = 0; k < _K; k++) {
-                ind_local = (i)*(_J)*(_K) + (j)*(_K) + k;
-                ind_global = i*_J*_K + j*_K + k;
+    for(int i = 0; i < _Nz; i++) {
+        for(int j = 0; j < _Ny; j++) {
+            for(int k = 0; k < _Nx; k++) {
+                ind_local = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
 
                 // Copy the fields at the current time to the auxillary arrays
-                _Ex_t0[ind_global] = _Ex[ind_local];
-                _Ey_t0[ind_global] = _Ey[ind_local];
-                _Ez_t0[ind_global] = _Ez[ind_local];
+                _Ex_t0[ind_local] = _Ex[ind_local];
+                _Ey_t0[ind_local] = _Ey[ind_local];
+                _Ez_t0[ind_local] = _Ez[ind_local];
 
-                _Hx_t0[ind_global] = _Hx[ind_local];
-                _Hy_t0[ind_global] = _Hy[ind_local];
-                _Hz_t0[ind_global] = _Hz[ind_local];
+                _Hx_t0[ind_local] = _Hx[ind_local];
+                _Hy_t0[ind_local] = _Hy[ind_local];
+                _Hz_t0[ind_local] = _Hz[ind_local];
             }
         }
     }
@@ -1080,22 +1055,21 @@ void fdtd::FDTD::capture_t0_fields()
 
 void fdtd::FDTD::capture_t1_fields()
 {
-    int ind_local, ind_global;
+    int ind_local;
 
-    for(int i = 0; i < _I; i++) {
-        for(int j = 0; j < _J; j++) {
-            for(int k = 0; k < _K; k++) {
-                ind_local = (i)*(_J)*(_K) + (j)*(_K) + k;
-                ind_global = i*_J*_K + j*_K + k;
+    for(int i = 0; i < _Nz; i++) {
+        for(int j = 0; j < _Ny; j++) {
+            for(int k = 0; k < _Nx; k++) {
+                ind_local = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
 
                 // Copy the fields at the current time to the auxillary arrays
-                _Ex_t1[ind_global] = _Ex[ind_local];
-                _Ey_t1[ind_global] = _Ey[ind_local];
-                _Ez_t1[ind_global] = _Ez[ind_local];
+                _Ex_t1[ind_local] = _Ex[ind_local];
+                _Ey_t1[ind_local] = _Ey[ind_local];
+                _Ez_t1[ind_local] = _Ez[ind_local];
 
-                _Hx_t1[ind_global] = _Hx[ind_local];
-                _Hy_t1[ind_global] = _Hy[ind_local];
-                _Hz_t1[ind_global] = _Hz[ind_local];
+                _Hx_t1[ind_local] = _Hx[ind_local];
+                _Hy_t1[ind_local] = _Hy[ind_local];
+                _Hz_t1[ind_local] = _Hz[ind_local];
             }
         }
     }
@@ -1105,20 +1079,19 @@ void fdtd::FDTD::capture_t1_fields()
 void fdtd::FDTD::calc_complex_fields(double t0, double t1)
 {
     double f0, f1, phi, A, t0H, t1H;
-    int ind_local, ind_global;
+    int ind_local;
 
     t0H = t0 - 0.5*_dt;
     t1H = t1 - 0.5*_dt;
 
-    for(int i = 0; i < _I; i++) {
-        for(int j = 0; j < _J; j++) {
-            for(int k = 0; k < _K; k++) {
-                ind_local = (i)*(_J)*(_K) + (j)*(_K) + k;
-                ind_global = i*_J*_K + j*_K + k;
+    for(int i = 0; i < _Nz; i++) {
+        for(int j = 0; j < _Ny; j++) {
+            for(int k = 0; k < _Nx; k++) {
+                ind_local = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
 
                 // Compute amplitude and phase for Ex
                 // Note: we are careful to assume exp(-i*w*t) time dependence
-                f0 = _Ex_t0[ind_global].real;
+                f0 = _Ex_t0[ind_local].real;
                 f1 = _Ex[ind_local];
                 phi = calc_phase(t0, t1, f0, f1);
                 A = calc_amplitude(t0, t1, f0, f1, phi);
@@ -1126,11 +1099,11 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ex_t0[ind_global].real = A*cos(phi);
-                _Ex_t0[ind_global].imag = -A*sin(phi);
+                _Ex_t0[ind_local].real = A*cos(phi);
+                _Ex_t0[ind_local].imag = -A*sin(phi);
 
                 // Ey
-                f0 = _Ey_t0[ind_global].real;
+                f0 = _Ey_t0[ind_local].real;
                 f1 = _Ey[ind_local];
                 phi = calc_phase(t0, t1, f0, f1);
                 A = calc_amplitude(t0, t1, f0, f1, phi);
@@ -1138,11 +1111,11 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ey_t0[ind_global].real = A*cos(phi);
-                _Ey_t0[ind_global].imag = -A*sin(phi);
+                _Ey_t0[ind_local].real = A*cos(phi);
+                _Ey_t0[ind_local].imag = -A*sin(phi);
 
                 // Ez
-                f0 = _Ez_t0[ind_global].real;
+                f0 = _Ez_t0[ind_local].real;
                 f1 = _Ez[ind_local];
                 phi = calc_phase(t0, t1, f0, f1);
                 A = calc_amplitude(t0, t1, f0, f1, phi);
@@ -1150,11 +1123,11 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ez_t0[ind_global].real = A*cos(phi);
-                _Ez_t0[ind_global].imag = -A*sin(phi);
+                _Ez_t0[ind_local].real = A*cos(phi);
+                _Ez_t0[ind_local].imag = -A*sin(phi);
 
                 // Hx
-                f0 = _Hx_t0[ind_global].real;
+                f0 = _Hx_t0[ind_local].real;
                 f1 = _Hx[ind_local];
                 phi = calc_phase(t0H, t1H, f0, f1);
                 A = calc_amplitude(t0H, t1H, f0, f1, phi);
@@ -1162,11 +1135,11 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hx_t0[ind_global].real = A*cos(phi);
-                _Hx_t0[ind_global].imag = -A*sin(phi);
+                _Hx_t0[ind_local].real = A*cos(phi);
+                _Hx_t0[ind_local].imag = -A*sin(phi);
 
                 // Hy
-                f0 = _Hy_t0[ind_global].real;
+                f0 = _Hy_t0[ind_local].real;
                 f1 = _Hy[ind_local];
                 phi = calc_phase(t0H, t1H, f0, f1);
                 A = calc_amplitude(t0H, t1H, f0, f1, phi);
@@ -1174,11 +1147,11 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hy_t0[ind_global].real = A*cos(phi);
-                _Hy_t0[ind_global].imag = -A*sin(phi);
+                _Hy_t0[ind_local].real = A*cos(phi);
+                _Hy_t0[ind_local].imag = -A*sin(phi);
 
                 // Hz
-                f0 = _Hz_t0[ind_global].real;
+                f0 = _Hz_t0[ind_local].real;
                 f1 = _Hz[ind_local];
                 phi = calc_phase(t0H, t1H, f0, f1);
                 A = calc_amplitude(t0H, t1H, f0, f1, phi);
@@ -1186,8 +1159,8 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hz_t0[ind_global].real = A*cos(phi);
-                _Hz_t0[ind_global].imag = -A*sin(phi);
+                _Hz_t0[ind_local].real = A*cos(phi);
+                _Hz_t0[ind_local].imag = -A*sin(phi);
             }
         }
     }
@@ -1198,22 +1171,21 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
 void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
 {
     double f0, f1, f2, phi, A, t0H, t1H, t2H;
-    int ind_local, ind_global;
+    int ind_local;
 
     t0H = t0 - 0.5*_dt;
     t1H = t1 - 0.5*_dt;
     t2H = t2 - 0.5*_dt;
 
-    for(int i = 0; i < _I; i++) {
-        for(int j = 0; j < _J; j++) {
-            for(int k = 0; k < _K; k++) {
-                ind_local = (i)*(_J)*(_K) + (j)*(_K) + k;
-                ind_global = i*_J*_K + j*_K + k;
+    for(int i = 0; i < _Nz; i++) {
+        for(int j = 0; j < _Ny; j++) {
+            for(int k = 0; k < _Nx; k++) {
+                ind_local = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
 
                 // Compute amplitude and phase for Ex
                 // Note: we are careful to assume exp(-i*w*t) time dependence
-                f0 = _Ex_t0[ind_global].real;
-                f1 = _Ex_t1[ind_global].real;
+                f0 = _Ex_t0[ind_local].real;
+                f1 = _Ex_t1[ind_local].real;
                 f2 = _Ex[ind_local];
                 phi = calc_phase(t0, t1, t2, f0, f1, f2);
                 A = calc_amplitude(t0, t1, t2, f0, f1, f2, phi);
@@ -1221,12 +1193,12 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ex_t0[ind_global].real = A*cos(phi);
-                _Ex_t0[ind_global].imag = -A*sin(phi);
+                _Ex_t0[ind_local].real = A*cos(phi);
+                _Ex_t0[ind_local].imag = -A*sin(phi);
 
                 // Ey
-                f0 = _Ey_t0[ind_global].real;
-                f1 = _Ey_t1[ind_global].real;
+                f0 = _Ey_t0[ind_local].real;
+                f1 = _Ey_t1[ind_local].real;
                 f2 = _Ey[ind_local];
                 phi = calc_phase(t0, t1, t2, f0, f1, f2);
                 A = calc_amplitude(t0, t1, t2, f0, f1, f2, phi);
@@ -1234,12 +1206,12 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ey_t0[ind_global].real = A*cos(phi);
-                _Ey_t0[ind_global].imag = -A*sin(phi);
+                _Ey_t0[ind_local].real = A*cos(phi);
+                _Ey_t0[ind_local].imag = -A*sin(phi);
 
                 // Ez
-                f0 = _Ez_t0[ind_global].real;
-                f1 = _Ez_t1[ind_global].real;
+                f0 = _Ez_t0[ind_local].real;
+                f1 = _Ez_t1[ind_local].real;
                 f2 = _Ez[ind_local];
                 phi = calc_phase(t0, t1, t2, f0, f1, f2);
                 A = calc_amplitude(t0, t1, t2, f0, f1, f2, phi);
@@ -1247,12 +1219,12 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ez_t0[ind_global].real = A*cos(phi);
-                _Ez_t0[ind_global].imag = -A*sin(phi);
+                _Ez_t0[ind_local].real = A*cos(phi);
+                _Ez_t0[ind_local].imag = -A*sin(phi);
 
                 // Hx
-                f0 = _Hx_t0[ind_global].real;
-                f1 = _Hx_t1[ind_global].real;
+                f0 = _Hx_t0[ind_local].real;
+                f1 = _Hx_t1[ind_local].real;
                 f2 = _Hx[ind_local];
                 phi = calc_phase(t0H, t1H, t2H, f0, f1, f2);
                 A = calc_amplitude(t0H, t1H, t2H, f0, f1, f2, phi);
@@ -1260,12 +1232,12 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hx_t0[ind_global].real = A*cos(phi);
-                _Hx_t0[ind_global].imag = -A*sin(phi);
+                _Hx_t0[ind_local].real = A*cos(phi);
+                _Hx_t0[ind_local].imag = -A*sin(phi);
 
                 // Hy
-                f0 = _Hy_t0[ind_global].real;
-                f1 = _Hy_t1[ind_global].real;
+                f0 = _Hy_t0[ind_local].real;
+                f1 = _Hy_t1[ind_local].real;
                 f2 = _Hy[ind_local];
                 phi = calc_phase(t0H, t1H, t2H, f0, f1, f2);
                 A = calc_amplitude(t0H, t1H, t2H, f0, f1, f2, phi);
@@ -1273,12 +1245,12 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hy_t0[ind_global].real = A*cos(phi);
-                _Hy_t0[ind_global].imag = -A*sin(phi);
+                _Hy_t0[ind_local].real = A*cos(phi);
+                _Hy_t0[ind_local].imag = -A*sin(phi);
 
                 // Hz
-                f0 = _Hz_t0[ind_global].real;
-                f1 = _Hz_t1[ind_global].real;
+                f0 = _Hz_t0[ind_local].real;
+                f1 = _Hz_t1[ind_local].real;
                 f2 = _Hz[ind_local];
                 phi = calc_phase(t0H, t1H, t2H, f0, f1, f2);
                 A = calc_amplitude(t0H, t1H, t2H, f0, f1, f2, phi);
@@ -1286,8 +1258,8 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hz_t0[ind_global].real = A*cos(phi);
-                _Hz_t0[ind_global].imag = -A*sin(phi);
+                _Hz_t0[ind_local].real = A*cos(phi);
+                _Hz_t0[ind_local].imag = -A*sin(phi);
 
             }
         }
@@ -1488,14 +1460,6 @@ void FDTD_set_grid_dims(fdtd::FDTD* fdtd, int Nx, int Ny, int Nz)
 {
     fdtd->set_grid_dims(Nx, Ny, Nz);
 }
-
-void FDTD_set_local_grid(fdtd::FDTD* fdtd,
-                         int k0, int j0, int i0,
-                         int K, int J, int I)
-{
-    fdtd->set_local_grid(k0, j0, i0, K, J, I);
-}
-
 
 void FDTD_set_dt(fdtd::FDTD* fdtd, double dt)
 {

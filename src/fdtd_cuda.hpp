@@ -166,9 +166,6 @@ namespace fdtd {
             // number of Yee cells in X, Y, Z
             int _Nx, _Ny, _Nz;
 
-            // size and location of local chunk in grid
-            int _I, _J, _K, _i0, _j0, _k0;
-
             // physical simulation size and Yee cell size in x,y,z
             double _X, _Y, _Z, _dx, _dy, _dz;
 
@@ -284,26 +281,6 @@ namespace fdtd {
              * \param Nz - The number of grid poitns in the z direction.
              */
             void set_grid_dims(int Nx, int Ny, int Nz);
-
-            /*!
-             * Set the location and size of the chunk of the grid owned by *this* process.
-             *
-             * The FDTD algorithm is heavily paralellized using MPI. This works by breaking
-             * the underlying arrays into chunks which are then operated on in different
-             * simultaneous processes. In order to do this, we need to tell each process which
-             * part of the grid they own.
-             *
-             * (i0, j0, k0) specifies the "lower left" corner of the chunk and (I, J, K)
-             * specify the dimensons of the chunk.
-             *
-             * \param k0 - The starting x index of this chunk.
-             * \param j0 - The starting y index of this chunk.
-             * \param i0 - The starting z index of this chunk.
-             * \param K - The width of this chunk along x.
-             * \param J - The width of this chunk along y.
-             * \param I - The width of this chunk along z.
-             */
-            void set_local_grid(int k0, int j0, int i0, int K, int J, int I);
 
             /*!
              * Set the wavelength of the simulation.
@@ -577,9 +554,6 @@ extern "C" {
                                     double X, double Y, double Z,
                                     double dx, double dy, double dz);
         void FDTD_set_grid_dims(fdtd::FDTD* fdtd, int Nx, int Ny, int Nz);
-        void FDTD_set_local_grid(fdtd::FDTD* fdtd, 
-                                 int k0, int j0, int i0,
-                                 int K, int J, int I);
         void FDTD_set_dt(fdtd::FDTD* fdtd, double dt);
         void FDTD_set_complex_eps(fdtd::FDTD* fdtd, bool complex_eps);
         void FDTD_set_field_arrays(fdtd::FDTD* fdtd,

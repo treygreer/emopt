@@ -315,7 +315,6 @@ class FDTD(MaxwellSolver):
         libFDTD.FDTD_set_wavelength(self._libfdtd, wavelength)
         libFDTD.FDTD_set_physical_dims(self._libfdtd, X, Y, Z, dx, dy, dz)
         libFDTD.FDTD_set_grid_dims(self._libfdtd, Nx, Ny, Nz)
-        libFDTD.FDTD_set_local_grid(self._libfdtd, 0, 0, 0, Nx, Ny, Nz)
         libFDTD.FDTD_set_dt(self._libfdtd, dt)
         libFDTD.FDTD_set_field_arrays(self._libfdtd,
                 self._Ex, self._Ey, self._Ez,
