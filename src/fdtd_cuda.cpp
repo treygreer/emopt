@@ -111,7 +111,7 @@ void fdtd::FDTD::set_mat_arrays(complex128 *eps_x, complex128 *eps_y, complex128
     _mu_x = mu_x; _mu_y = mu_y; _mu_z = mu_z;
 }
 
-void fdtd::FDTD::update_H(int n, double t)
+void fdtd::FDTD::update_H(double t)
 {
     double odx = _R/_dx,
            ody = _R/_dy,
@@ -133,23 +133,23 @@ void fdtd::FDTD::update_H(int n, double t)
 
     for(int i = 0; i < _Nz; i++) {
         int kill_zwrap = (_bc[2] != 'P' && i == _Nz-1) ? 1 : 0;
-	int ip1 = i==_Nz-1 ? 0 : i+1;
+		int ip1 = i==_Nz-1 ? 0 : i+1;
         for(int j = 0; j < _Ny; j++) {
-	    int kill_ywrap = (_bc[1] != 'P' && j == _Ny-1) ? 1 : 0;
-	    int jp1 = j==_Ny-1 ? 0 : j+1;
-	    for(int k = 0; k < _Nx; k++) {
-		int kill_xwrap = (_bc[0] != 'P' && k == _Nx-1) ? 1 : 0;
-		int kp1 = k==_Nx-1 ? 0 : k+1;
+			int kill_ywrap = (_bc[1] != 'P' && j == _Ny-1) ? 1 : 0;
+			int jp1 = j==_Ny-1 ? 0 : j+1;
+			for(int k = 0; k < _Nx; k++) {
+				int kill_xwrap = (_bc[0] != 'P' && k == _Nx-1) ? 1 : 0;
+				int kp1 = k==_Nx-1 ? 0 : k+1;
 
                 ind_ijk =   (i+0)*(_Ny+0)*(_Nx+0) + (j+0)*(_Nx+0) + k+0;
                 ind_ijp1k = (i+0)*(_Ny+0)*(_Nx+0) + (jp1)*(_Nx+0) + k+0;
                 ind_ip1jk = (ip1)*(_Ny+0)*(_Nx+0) + (j+0)*(_Nx+0) + k+0;
                 ind_ijkp1 = (i+0)*(_Ny+0)*(_Nx+0) + (j+0)*(_Nx+0) + kp1;
 
-		assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-		assert(ind_ip1jk >= 0 && ind_ip1jk < _Nz*_Ny*_Nx);
-		assert(ind_ijp1k >= 0 && ind_ijp1k < _Nz*_Ny*_Nx);
-		assert(ind_ijkp1 >= 0 && ind_ijkp1 < _Nz*_Ny*_Nx);
+				assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+				assert(ind_ip1jk >= 0 && ind_ip1jk < _Nz*_Ny*_Nx);
+				assert(ind_ijp1k >= 0 && ind_ijp1k < _Nz*_Ny*_Nx);
+				assert(ind_ijkp1 >= 0 && ind_ijkp1 < _Nz*_Ny*_Nx);
 
                 // compute prefactors
                 dt_by_mux = _dt/_mu_x[ind_ijk].real;
@@ -293,10 +293,10 @@ void fdtd::FDTD::update_H(int n, double t)
                     ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
                     ind_src = i*Js*Ks + j*Ks + k;
 
-		    assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-		    assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
+					assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+					assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
 
-                    src_t = src_func_t(n, t, Mx[ind_src].imag);
+                    src_t = src_func_t(t, Mx[ind_src].imag);
                     _Hx[ind_ijk] = _Hx[ind_ijk] + src_t * Mx[ind_src].real * _dt / _mu_x[ind_ijk].real;
                 }
             }
@@ -311,10 +311,10 @@ void fdtd::FDTD::update_H(int n, double t)
                     ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
                     ind_src = i*Js*Ks + j*Ks + k;
 
-		    assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-		    assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
+					assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+					assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
 
-                    src_t = src_func_t(n, t, My[ind_src].imag);
+                    src_t = src_func_t(t, My[ind_src].imag);
                     _Hy[ind_ijk] = _Hy[ind_ijk] + src_t * My[ind_src].real * _dt / _mu_y[ind_ijk].real;
                 }
             }
@@ -329,10 +329,10 @@ void fdtd::FDTD::update_H(int n, double t)
                     ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
                     ind_src = i*Js*Ks + j*Ks + k;
 
-		    assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-		    assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
+					assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+					assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
 
-                    src_t = src_func_t(n, t, Mz[ind_src].imag);
+                    src_t = src_func_t(t, Mz[ind_src].imag);
                     _Hz[ind_ijk] = _Hz[ind_ijk] + src_t * Mz[ind_src].real * _dt / _mu_z[ind_ijk].real;
                 }
             }
@@ -341,7 +341,7 @@ void fdtd::FDTD::update_H(int n, double t)
     }
 }
 
-void fdtd::FDTD::update_E(int n, double t)
+void fdtd::FDTD::update_E(double t)
 {
     double odx = _R/_dx,
            ody = _R/_dy,
@@ -364,30 +364,29 @@ void fdtd::FDTD::update_E(int n, double t)
 
     for(int i = 0; i < _Nz; i++) {
         int action_zwrap = (_bc[2] == 'P' || i != 0 ? ACTION_NOP :
-			    _bc[2] == '0'           ? ACTION_ZERO :
-			    _bc[2] == 'E'           ? ACTION_FLIP : ACTION_COPY);
-	int im1 = i==0 ? _Nz-1 : i-1;
+							_bc[2] == '0'           ? ACTION_ZERO :
+							_bc[2] == 'E'           ? ACTION_FLIP : ACTION_COPY);
+		int im1 = i==0 ? _Nz-1 : i-1;
         for(int j = 0; j < _Ny; j++) {
-	   int action_ywrap = (_bc[1] == 'P' || j != 0 ? ACTION_NOP :
-			       _bc[1] == '0'           ? ACTION_ZERO :
-			       _bc[1] == 'E'           ? ACTION_FLIP : ACTION_COPY);
-	   int jm1 = j==0 ? _Ny-1 : j-1;
-	   for(int k = 0; k < _Nx; k++) {
-		int action_xwrap = (_bc[0] == 'P' || k != 0 ? ACTION_NOP :
-				    _bc[0] == '0'           ? ACTION_ZERO :
-				    _bc[0] == 'E'           ? ACTION_FLIP : ACTION_COPY);
-		int km1 = k==0 ? _Nx-1 : k-1;
+			int action_ywrap = (_bc[1] == 'P' || j != 0 ? ACTION_NOP :
+								_bc[1] == '0'           ? ACTION_ZERO :
+								_bc[1] == 'E'           ? ACTION_FLIP : ACTION_COPY);
+			int jm1 = j==0 ? _Ny-1 : j-1;
+			for(int k = 0; k < _Nx; k++) {
+				int action_xwrap = (_bc[0] == 'P' || k != 0 ? ACTION_NOP :
+									_bc[0] == '0'           ? ACTION_ZERO :
+									_bc[0] == 'E'           ? ACTION_FLIP : ACTION_COPY);
+				int km1 = k==0 ? _Nx-1 : k-1;
 
                 ind_ijk   = (i-0)*(_Ny)*(_Nx) + (j-0)*(_Nx) + k-0;
                 ind_ijm1k = (i-0)*(_Ny)*(_Nx) + (jm1)*(_Nx) + k-0;
                 ind_im1jk = (im1)*(_Ny)*(_Nx) + (j-0)*(_Nx) + k-0;
                 ind_ijkm1 = (i-0)*(_Ny)*(_Nx) + (j-0)*(_Nx) + km1;
 
-
-		assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-		assert(ind_im1jk >= 0 && ind_im1jk < _Nz*_Ny*_Nx);
-		assert(ind_ijm1k >= 0 && ind_ijm1k < _Nz*_Ny*_Nx);
-		assert(ind_ijkm1 >= 0 && ind_ijkm1 < _Nz*_Ny*_Nx);
+				assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
+				assert(ind_im1jk >= 0 && ind_im1jk < _Nz*_Ny*_Nx);
+				assert(ind_ijm1k >= 0 && ind_ijm1k < _Nz*_Ny*_Nx);
+				assert(ind_ijkm1 >= 0 && ind_ijkm1 < _Nz*_Ny*_Nx);
 
                 a_x = 1.0; a_y = 1.0; a_z = 1.0;
                 b_x = _dt/_eps_x[ind_ijk].real;
@@ -540,7 +539,7 @@ void fdtd::FDTD::update_E(int n, double t)
 
                     b_x = _dt/_eps_x[ind_ijk].real;
 
-                    src_t = src_func_t(n, t, Jx[ind_src].imag);
+                    src_t = src_func_t(t, Jx[ind_src].imag);
                     _Ex[ind_ijk] = _Ex[ind_ijk] - src_t * Jx[ind_src].real * b_x;
                 }
             }
@@ -557,7 +556,7 @@ void fdtd::FDTD::update_E(int n, double t)
 
                     b_y = _dt/_eps_y[ind_ijk].real;
 
-                    src_t = src_func_t(n, t, Jy[ind_src].imag);
+                    src_t = src_func_t(t, Jy[ind_src].imag);
                     _Ey[ind_ijk] = _Ey[ind_ijk] - src_t * Jy[ind_src].real * b_y;
                 }
             }
@@ -574,7 +573,7 @@ void fdtd::FDTD::update_E(int n, double t)
 
                     b_z = _dt/_eps_z[ind_ijk].real;
 
-                    src_t = src_func_t(n, t, Jz[ind_src].imag);
+                    src_t = src_func_t(t, Jz[ind_src].imag);
                     _Ez[ind_ijk] = _Ez[ind_ijk] - src_t * Jz[ind_src].real * b_z;
                 }
             }
@@ -1416,9 +1415,8 @@ void fdtd::FDTD::set_source_properties(double src_T, double src_min)
     //_src_n0 = 1.0 / _src_k * log((1.0-src_min)/src_min); // src delay
 }
 
-inline double fdtd::FDTD::src_func_t(int n, double t, double phase)
+inline double fdtd::FDTD::src_func_t(double t, double phase)
 {
-    //return sin(t + phase) / (1.0 + exp(-_src_k*(n-_src_n0)));
     if(t <= _src_T)
         return sin(t + phase)*((1+_src_min) * exp(-(t-_src_T)*(t-_src_T) / _src_k) - _src_min);
     else
@@ -1485,14 +1483,14 @@ void FDTD_set_mat_arrays(fdtd::FDTD* fdtd,
     fdtd->set_mat_arrays(eps_x, eps_y, eps_z, mu_x, mu_y, mu_z);
 }
 
-void FDTD_update_H(fdtd::FDTD* fdtd, int n, double t)
+void FDTD_update_H(fdtd::FDTD* fdtd, double t)
 {
-    fdtd->update_H(n, t);
+    fdtd->update_H(t);
 }
 
-void FDTD_update_E(fdtd::FDTD* fdtd, int n, double t)
+void FDTD_update_E(fdtd::FDTD* fdtd, double t)
 {
-    fdtd->update_E(n, t);
+    fdtd->update_E(t);
 }
 
 void FDTD_set_pml_widths(fdtd::FDTD* fdtd, int xmin, int xmax,
@@ -1591,14 +1589,12 @@ void FDTD_set_source_properties(fdtd::FDTD* fdtd, double src_T, double src_min)
     fdtd->set_source_properties(src_T, src_min);
 }
 
-double FDTD_src_func_t(fdtd::FDTD* fdtd, int n, double t, double phase)
+double FDTD_src_func_t(fdtd::FDTD* fdtd, double t, double phase)
 {
-    return fdtd->src_func_t(n, t, phase);
+    return fdtd->src_func_t(t, phase);
 }
 
 void FDTD_set_bc(fdtd::FDTD* fdtd, char* newbc)
 {
     fdtd->set_bc(newbc);
 }
-
-

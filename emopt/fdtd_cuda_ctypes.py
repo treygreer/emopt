@@ -126,7 +126,7 @@ libFDTD.FDTD_clear_sources.restype = None
 libFDTD.FDTD_set_source_properties.argtypes = [c_void_p, c_double, c_double]
 libFDTD.FDTD_set_source_properties.restype = None
 
-libFDTD.FDTD_src_func_t.argtypes = [c_void_p, c_int, c_double, c_double]
+libFDTD.FDTD_src_func_t.argtypes = [c_void_p, c_double, c_double]
 libFDTD.FDTD_src_func_t.restype = c_double
 
 libFDTD.FDTD_set_bc.argtypes = [c_void_p, c_char_p]

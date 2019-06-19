@@ -633,13 +633,9 @@ class FDTD(MaxwellSolver):
         jmin = domain.j1
         kmin = domain.k1
 
-        id1 = imin - domain.i1
-        jd1 = jmin - domain.j1
-        kd1 = kmin - domain.k1
-
         return (imin, jmin, kmin), \
                (imin, jmin, kmin), \
-               (id1, jd1, kd1), \
+               (0, 0, 0), \
                (imax - imin, jmax - jmin, kmax - kmin)
 
     def __set_sources(self, src, domain, adjoint=False):

@@ -359,18 +359,16 @@ namespace fdtd {
             /*!
              * Update the magnetic field at time t using the electric field at time t-1/2*dt.
              *
-             * \param n - The number of the time step.
              * \param t - The time of the update = n*dt.
              */
-            void update_H(int n, double t);
+            void update_H(double t);
 
             /*!
              * Update the electric field at time t using the magnetic field at time t-1/2*dt.
              *
-             * \param n - The number of the time step.
              * \param t - The time of the update = n*dt+1/2*dt.
              */
-            void update_E(int n, double t);
+            void update_E(double t);
 
             // PML configuration
             /*!
@@ -524,13 +522,12 @@ namespace fdtd {
             /*!
              * The time dependence of the source.
              *
-             * \param n - The current time step.
              * \param t - The current time.
              * \param phase - The phase of the sinusoid of the source.
              *
              * \return The time-dependent modulation value of the source.
              */
-            double src_func_t(int n, double t, double phase);
+            double src_func_t(double t, double phase);
 
             /* Set the boundary conditions.
              *
@@ -564,8 +561,8 @@ extern "C" {
                                  complex128 *eps_x, complex128 *eps_y, complex128 *eps_z,
                                  complex128 *mu_x, complex128 *mu_y, complex128 *mu_z);
 
-        void FDTD_update_H(fdtd::FDTD* fdtd, int n, double t);
-        void FDTD_update_E(fdtd::FDTD* fdtd, int n, double t);
+        void FDTD_update_H(fdtd::FDTD* fdtd, double t);
+        void FDTD_update_E(fdtd::FDTD* fdtd, double t);
 
         // Pml management
         void FDTD_set_pml_widths(fdtd::FDTD* fdtd, int xmin, int xmax,
@@ -605,7 +602,7 @@ extern "C" {
 
         void FDTD_set_source_properties(fdtd::FDTD* fdtd, double src_T, double src_min);
 
-        double FDTD_src_func_t(fdtd::FDTD* fdtd, int n, double t, double phase);
+        double FDTD_src_func_t(fdtd::FDTD* fdtd, double t, double phase);
 
         // boundary conditions
         void FDTD_set_bc(fdtd::FDTD* fdtd, char* newbc);
