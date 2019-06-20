@@ -9,7 +9,7 @@
 #define pow3(x) x*x*x
 
 // uncomment to enable lossy materials
-#define COMPLEX_EPS
+// #define COMPLEX_EPS
 
 /** A complex value data type that is compatible with numpy.
  *
@@ -162,6 +162,9 @@ namespace fdtd {
 
     class FDTD {
         private:
+            // Field and source arrays
+            double  *_Ex, *_Ey, *_Ez,
+                    *_Hx, *_Hy, *_Hz;
 
             // number of Yee cells in X, Y, Z
             int _Nx, _Ny, _Nz;
@@ -177,10 +180,6 @@ namespace fdtd {
 
             // source time parameters
             double _src_T, _src_min, _src_k, _src_n0;
-
-            // Field and source arrays
-            double  *_Ex, *_Ey, *_Ez,
-                    *_Hx, *_Hy, *_Hz;
 
             bool _complex_eps;
 
@@ -247,7 +246,7 @@ namespace fdtd {
 
         public:
             
-            FDTD();
+  		    FDTD(int Nx, int Ny, int Nz);
             ~FDTD();
 
             /*!
@@ -269,18 +268,6 @@ namespace fdtd {
              */
             void set_physical_dims(double X, double Y, double Z,
                                          double dx, double dy, double dz);
-
-            /*!
-             * Set the number of points in the grid along x, y, and z.
-             *
-             * Technically, this function is totally redundant with set_physical_dims.
-             * Consider removing it in the future?
-             *
-             * \param Nx - The number of grid points in the x direction.
-             * \param Ny - The number of grid poitns in the y direction.
-             * \param Nz - The number of grid poitns in the z direction.
-             */
-            void set_grid_dims(int Nx, int Ny, int Nz);
 
             /*!
              * Set the wavelength of the simulation.
@@ -308,27 +295,6 @@ namespace fdtd {
              * \param dt - The time step.
              */
             void set_dt(double dt);
-
-            /*!
-             * Set the field arrays.
-             *
-             * Most memory used has to be allocated separately and then provided to the FDTD
-             * class to be used. This separates the taks of managing parallel arrays and solving
-             * Maxwell's Equations. The arrays provided to this function are used to store the
-             * electric and magnetic field values everywhere in the grid.
-             *
-             * Note: These fields MUST be preallocated. Furthermore, they MUST be *local* vectors
-             * as defined by PETSc.
-             *
-             * \param Ex - The preallocated local vector for the x component of the electric field.
-             * \param Ey - The preallocated local vector for the y component of the electric field.
-             * \param Ez - The preallocated local vector for the z component of the electric field.
-             * \param Hx - The preallocated local vector for the x component of the magnetic field.
-             * \param Hy - The preallocated local vector for the y component of the magnetic field.
-             * \param Hz - The preallocated local vector for the z component of the magnetic field.
-             */
-            void set_field_arrays(double *Ex, double *Ey, double *Ez,
-                                  double *Hx, double *Hy, double *Hz);
 
             /*!
              * Set the material arrays which store complex permittivity and permeability
@@ -543,20 +509,14 @@ namespace fdtd {
 };
 
 extern "C" {
-        fdtd::FDTD* FDTD_new();
-
+	    fdtd::FDTD* FDTD_new(int Nx, int Ny, int Nz);
 
         void FDTD_set_wavelength(fdtd::FDTD* fdtd, double wavelength);
         void FDTD_set_physical_dims(fdtd::FDTD* fdtd, 
                                     double X, double Y, double Z,
                                     double dx, double dy, double dz);
-        void FDTD_set_grid_dims(fdtd::FDTD* fdtd, int Nx, int Ny, int Nz);
         void FDTD_set_dt(fdtd::FDTD* fdtd, double dt);
         void FDTD_set_complex_eps(fdtd::FDTD* fdtd, bool complex_eps);
-        void FDTD_set_field_arrays(fdtd::FDTD* fdtd,
-                                   double *Ex, double *Ey, double *Ez,
-                                   double *Hx, double *Hy, double *Hz);
-
         void FDTD_set_mat_arrays(fdtd::FDTD* fdtd,
                                  complex128 *eps_x, complex128 *eps_y, complex128 *eps_z,
                                  complex128 *mu_x, complex128 *mu_y, complex128 *mu_z);

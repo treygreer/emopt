@@ -20,11 +20,20 @@ libFDTD = cdll.LoadLibrary(so_path)
 c_complex_p = ndpointer(np.complex128, ndim=1, flags='C')
 c_double_p = ndpointer(np.double, ndim=1, flags='C')
 
+# class for c++ FDTD structure
+class CPP_FDTD(Structure):
+    _fields_ = [("_Ex", POINTER(c_double)),
+                ("_Ey", POINTER(c_double)),
+                ("_Ez", POINTER(c_double)),
+                ("_Hx", POINTER(c_double)),
+                ("_Hy", POINTER(c_double)),
+                ("_Hz", POINTER(c_double))]
+
 #######################################################
 # ctypes interface definition
 #######################################################
-libFDTD.FDTD_new.argtypes = []
-libFDTD.FDTD_new.restype = c_void_p
+libFDTD.FDTD_new.argtypes = [c_int, c_int, c_int]
+libFDTD.FDTD_new.restype = POINTER(CPP_FDTD)
 
 libFDTD.FDTD_set_wavelength.argtypes = [c_void_p, c_double]
 libFDTD.FDTD_set_wavelength.restype = None
@@ -34,20 +43,11 @@ libFDTD.FDTD_set_physical_dims.argtypes = [c_void_p,
                                            c_double, c_double, c_double]
 libFDTD.FDTD_set_physical_dims.restype = None
 
-libFDTD.FDTD_set_grid_dims.argtypes = [c_void_p, c_int, c_int, c_int]
-libFDTD.FDTD_set_grid_dims.restype = None
-
 libFDTD.FDTD_set_dt.argtypes = [c_void_p, c_double]
 libFDTD.FDTD_set_dt.restype = None
 
 libFDTD.FDTD_set_complex_eps.argtypes = [c_void_p, c_bool]
 libFDTD.FDTD_set_complex_eps.restype = None
-
-libFDTD.FDTD_set_field_arrays.argtypes = [c_void_p,
-                                          c_double_p, c_double_p, c_double_p,
-                                          c_double_p, c_double_p, c_double_p]
-
-libFDTD.FDTD_set_field_arrays.restype = None
 
 libFDTD.FDTD_set_mat_arrays.argtypes = [c_void_p,
                                           c_complex_p, c_complex_p, c_complex_p,

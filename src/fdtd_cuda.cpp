@@ -4,8 +4,21 @@
 #undef NDEBUG
 #include <assert.h>
 
-fdtd::FDTD::FDTD()
+fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 {
+    _Nx = Nx;
+    _Ny = Ny;
+    _Nz = Nz;
+
+	// Allocate field arrays
+	int N = Nz * Ny * Nx;
+	_Ex = new double[N];
+	_Ey = new double[N];
+	_Ez = new double[N];
+	_Hx = new double[N];
+	_Hy = new double[N];
+	_Hz = new double[N];
+
     // make sure all of our PML arrays start NULL
     _pml_Exy0 = NULL; _pml_Exy1 = NULL; _pml_Exz0 = NULL; _pml_Exz1 = NULL;
     _pml_Eyx0 = NULL; _pml_Eyx1 = NULL; _pml_Eyz0 = NULL; _pml_Eyz1 = NULL;
@@ -32,6 +45,10 @@ fdtd::FDTD::FDTD()
 
 fdtd::FDTD::~FDTD()
 {
+	// Clean up Field arrays
+	delete[] _Ex; delete[] _Ey; delete[] _Ez;
+	delete[] _Hx; delete[] _Hy; delete[] _Hz;
+
     // Clean up PML arrays
     delete[] _pml_Exy0; delete[] _pml_Exy1; delete[] _pml_Exz0; delete[] _pml_Exz1;
     delete[] _pml_Eyx0; delete[] _pml_Eyx1; delete[] _pml_Eyz0; delete[] _pml_Eyz1;
@@ -66,17 +83,10 @@ fdtd::FDTD::~FDTD()
 }
 
 void fdtd::FDTD::set_physical_dims(double X, double Y, double Z,
-                                         double dx, double dy, double dz)
+								   double dx, double dy, double dz)
 {
     _X = X; _Y = Y; _Z = Z;
     _dx = dx; _dy = dy; _dz = dz;
-}
-
-void fdtd::FDTD::set_grid_dims(int Nx, int Ny, int Nz)
-{
-    _Nx = Nx;
-    _Ny = Ny;
-    _Nz = Nz;
 }
 
 void fdtd::FDTD::set_wavelength(double wavelength)
@@ -95,13 +105,6 @@ void fdtd::FDTD::set_dt(double dt)
 void fdtd::FDTD::set_complex_eps(bool complex_eps)
 {
     _complex_eps = complex_eps;
-}
-
-void fdtd::FDTD::set_field_arrays(double *Ex, double *Ey, double *Ez,
-                                  double *Hx, double *Hy, double *Hz)
-{
-    _Ex = Ex; _Ey = Ey; _Ez = Ez;
-    _Hx = Hx; _Hy = Hy; _Hz = Hz;
 }
 
 void fdtd::FDTD::set_mat_arrays(complex128 *eps_x, complex128 *eps_y, complex128 *eps_z,
@@ -1437,9 +1440,9 @@ void fdtd::FDTD::set_bc(char* newbc)
 // ctypes interface
 ///////////////////////////////////////////////////////////////////////////
 
-fdtd::FDTD* FDTD_new()
+fdtd::FDTD* FDTD_new(int Nx, int Ny, int Nz)
 {
-    return new fdtd::FDTD();
+    return new fdtd::FDTD(Nx, Ny, Nz);
 }
 
 void FDTD_set_wavelength(fdtd::FDTD* fdtd, double wavelength)
@@ -1454,11 +1457,6 @@ void FDTD_set_physical_dims(fdtd::FDTD* fdtd,
     fdtd->set_physical_dims(X, Y, Z, dx, dy, dz);
 }
 
-void FDTD_set_grid_dims(fdtd::FDTD* fdtd, int Nx, int Ny, int Nz)
-{
-    fdtd->set_grid_dims(Nx, Ny, Nz);
-}
-
 void FDTD_set_dt(fdtd::FDTD* fdtd, double dt)
 {
     fdtd->set_dt(dt);
@@ -1467,13 +1465,6 @@ void FDTD_set_dt(fdtd::FDTD* fdtd, double dt)
 void FDTD_set_complex_eps(fdtd::FDTD* fdtd, bool complex_eps)
 {
     fdtd->set_complex_eps(complex_eps);
-}
-
-void FDTD_set_field_arrays(fdtd::FDTD* fdtd,
-                           double *Ex, double *Ey, double *Ez,
-                           double *Hx, double *Hy, double *Hz)
-{
-    fdtd->set_field_arrays(Ex, Ey, Ez, Hx, Hy, Hz);
 }
 
 void FDTD_set_mat_arrays(fdtd::FDTD* fdtd,

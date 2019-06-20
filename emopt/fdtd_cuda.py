@@ -258,14 +258,6 @@ class FDTD(MaxwellSolver):
         dt = self._Sc * np.min([dx, dy, dz])/self._R / np.sqrt(3) * min_rindex
         self._dt = dt
 
-        # field arrays
-        self._Ex = np.zeros((Nx*Ny*Nz,), dtype=np.double)
-        self._Ey = np.zeros((Nx*Ny*Nz,), dtype=np.double)
-        self._Ez = np.zeros((Nx*Ny*Nz,), dtype=np.double)
-        self._Hx = np.zeros((Nx*Ny*Nz,), dtype=np.double)
-        self._Hy = np.zeros((Nx*Ny*Nz,), dtype=np.double)
-        self._Hz = np.zeros((Nx*Ny*Nz,), dtype=np.double)
-
         # material arrays -- global since we dont need to pass values around
         self._eps_x = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
         self._eps_y = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
@@ -311,14 +303,16 @@ class FDTD(MaxwellSolver):
         # setup the C library which takes care of the E and H updates
         # Nothing complicated here -- just passing all of the sim parameters
         # and work vectors over to the c library
-        self._libfdtd = libFDTD.FDTD_new()
+        self._libfdtd = libFDTD.FDTD_new(Nx, Ny, Nz)
+        self._Ex = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
+        self._Ey = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
+        self._Ez = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
+        self._Hx = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
+        self._Hy = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
+        self._Hz = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
         libFDTD.FDTD_set_wavelength(self._libfdtd, wavelength)
         libFDTD.FDTD_set_physical_dims(self._libfdtd, X, Y, Z, dx, dy, dz)
-        libFDTD.FDTD_set_grid_dims(self._libfdtd, Nx, Ny, Nz)
         libFDTD.FDTD_set_dt(self._libfdtd, dt)
-        libFDTD.FDTD_set_field_arrays(self._libfdtd,
-                self._Ex, self._Ey, self._Ez,
-                self._Hx, self._Hy, self._Hz)
         libFDTD.FDTD_set_mat_arrays(self._libfdtd,
                 self._eps_x, self._eps_y, self._eps_z,
                 self._mu_x, self._mu_y, self._mu_z)
@@ -376,13 +370,6 @@ class FDTD(MaxwellSolver):
 
         self._sources = []
         self._adj_sources = []
-
-        ## Define a natural vector for field retrieval
-        # We could do this much more efficiently, but except for huge problems,
-        # it isn't really necessary and this way the code is simpler
-        #self._vn = da.createNaturalVec()
-        #print(f'_vn shape = {self._vn.getArray().shape}')
-        #self._vn = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
 
         # default boundary conditions = PEC
         self._bc = ['0', '0', '0']
@@ -1048,34 +1035,13 @@ class FDTD(MaxwellSolver):
         n0 = n
         for n in range(Tn):
             libFDTD.FDTD_update_H(self._libfdtd, (n+n0)*dt)
-
-            # Note: da.localToLocal seems to have the same performance?
-            #self._gc.update_local_vector(self._Hx)
-            #self._gc.update_local_vector(self._Hy)
-            #self._gc.update_local_vector(self._Hz)
-
             libFDTD.FDTD_update_E(self._libfdtd, (n+n0+0.5)*dt)
-
-            #self._gc.update_local_vector(self._Ex)
-            #self._gc.update_local_vector(self._Ey)
-            #self._gc.update_local_vector(self._Ez)
-
 
         libFDTD.FDTD_capture_t1_fields(self._libfdtd)
 
         for n in range(Tn):
             libFDTD.FDTD_update_H(self._libfdtd, (n+n0+Tn)*dt)
-
-            # Note: da.localToLocal seems to have the same performance?
-            #self._gc.update_local_vector(self._Hx)
-            #self._gc.update_local_vector(self._Hy)
-            #self._gc.update_local_vector(self._Hz)
-
             libFDTD.FDTD_update_E(self._libfdtd, (n+n0+Tn+0.5)*dt)
-
-            #self._gc.update_local_vector(self._Ex)
-            #self._gc.update_local_vector(self._Ey)
-            #self._gc.update_local_vector(self._Ez)
 
         t0 = n0*dt
         t1 = (n0+Tn)*dt
