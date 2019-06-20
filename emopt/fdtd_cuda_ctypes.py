@@ -55,10 +55,10 @@ libFDTD.FDTD_set_mat_arrays.argtypes = [c_void_p,
 
 libFDTD.FDTD_set_mat_arrays.restype = None
 
-libFDTD.FDTD_update_H.argtypes = [c_void_p, c_int, c_double]
+libFDTD.FDTD_update_H.argtypes = [c_void_p, c_double]
 libFDTD.FDTD_update_H.restype = None
 
-libFDTD.FDTD_update_E.argtypes = [c_void_p, c_int, c_double]
+libFDTD.FDTD_update_E.argtypes = [c_void_p, c_double]
 libFDTD.FDTD_update_E.restype = None
 
 libFDTD.FDTD_set_pml_widths.argtypes = [c_void_p, c_int, c_int,
