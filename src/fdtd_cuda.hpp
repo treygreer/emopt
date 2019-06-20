@@ -166,6 +166,10 @@ namespace fdtd {
             double  *_Ex, *_Ey, *_Ez,
                     *_Hx, *_Hy, *_Hz;
 
+		    // Material arrays
+            complex128 *_eps_x, *_eps_y, *_eps_z,
+ 				       *_mu_x, *_mu_y, *_mu_z;
+
             // number of Yee cells in X, Y, Z
             int _Nx, _Ny, _Nz;
 
@@ -183,12 +187,10 @@ namespace fdtd {
 
             bool _complex_eps;
 
-            // Complex array associated with materials and field at captured
+            // Complex array associated field at captured
             // time steps. Technically only one set of captured fields need to be
             // complex.
-            complex128 *_eps_x, *_eps_y, *_eps_z,
-                       *_mu_x, *_mu_y, *_mu_z,
-                       *_Ex_t0, *_Ey_t0, *_Ez_t0,
+            complex128 *_Ex_t0, *_Ey_t0, *_Ez_t0,
                        *_Hx_t0, *_Hy_t0, *_Hz_t0,
                        *_Ex_t1, *_Ey_t1, *_Ez_t1,
                        *_Hx_t1, *_Hy_t1, *_Hz_t1;
@@ -295,26 +297,6 @@ namespace fdtd {
              * \param dt - The time step.
              */
             void set_dt(double dt);
-
-            /*!
-             * Set the material arrays which store complex permittivity and permeability
-             * distributions.
-             *
-             * Note: These arrays must be preallocated global vectors as defined by PETSc.
-             * Note2: This FDTD solver is built around the idea of grid smoothing which
-             * maps discrete material boundaries onto the underlying rectangular grid. This
-             * mapping inherently results in a diagonal anisotropy. As a result, we need
-             * to provide 3 permittivity arrays and 3 permeability arrays.
-             *
-             * \param eps_x - The preallocated vector for the 11 element of the permittivity tensor.
-             * \param eps_y - The preallocated vector for the 22 element of the permittivity tensor.
-             * \param eps_z - The preallocated vector for the 33 element of the permittivity tensor.
-             * \param mu_x - The preallocated vector for the 11 element of the permeability tensor.
-             * \param mu_y - The preallocated vector for the 22 element of the permeability tensor.
-             * \param mu_z - The preallocated vector for the 33 element of the permeability tensor.
-             */
-            void set_mat_arrays(complex128 *eps_x, complex128 *eps_y, complex128 *eps_z,
-                                complex128 *mu_x, complex128 *mu_y, complex128 *mu_z);
 
             /*!
              * Set a flag that indicates whether or not the permittivity is pure real
@@ -517,10 +499,6 @@ extern "C" {
                                     double dx, double dy, double dz);
         void FDTD_set_dt(fdtd::FDTD* fdtd, double dt);
         void FDTD_set_complex_eps(fdtd::FDTD* fdtd, bool complex_eps);
-        void FDTD_set_mat_arrays(fdtd::FDTD* fdtd,
-                                 complex128 *eps_x, complex128 *eps_y, complex128 *eps_z,
-                                 complex128 *mu_x, complex128 *mu_y, complex128 *mu_z);
-
         void FDTD_update_H(fdtd::FDTD* fdtd, double t);
         void FDTD_update_E(fdtd::FDTD* fdtd, double t);
 

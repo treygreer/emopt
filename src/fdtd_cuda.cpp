@@ -19,6 +19,14 @@ fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 	_Hy = new double[N];
 	_Hz = new double[N];
 
+	// Allocate material arrays
+    _eps_x = new complex128[N];
+    _eps_y = new complex128[N];
+    _eps_z = new complex128[N];
+    _mu_x  = new complex128[N];
+    _mu_y  = new complex128[N];
+    _mu_z  = new complex128[N];
+
     // make sure all of our PML arrays start NULL
     _pml_Exy0 = NULL; _pml_Exy1 = NULL; _pml_Exz0 = NULL; _pml_Exz1 = NULL;
     _pml_Eyx0 = NULL; _pml_Eyx1 = NULL; _pml_Eyz0 = NULL; _pml_Eyz1 = NULL;
@@ -105,13 +113,6 @@ void fdtd::FDTD::set_dt(double dt)
 void fdtd::FDTD::set_complex_eps(bool complex_eps)
 {
     _complex_eps = complex_eps;
-}
-
-void fdtd::FDTD::set_mat_arrays(complex128 *eps_x, complex128 *eps_y, complex128 *eps_z,
-                                complex128 *mu_x, complex128 *mu_y, complex128 *mu_z)
-{
-    _eps_x = eps_x; _eps_y = eps_y; _eps_z = eps_z;
-    _mu_x = mu_x; _mu_y = mu_y; _mu_z = mu_z;
 }
 
 void fdtd::FDTD::update_H(double t)
@@ -1465,13 +1466,6 @@ void FDTD_set_dt(fdtd::FDTD* fdtd, double dt)
 void FDTD_set_complex_eps(fdtd::FDTD* fdtd, bool complex_eps)
 {
     fdtd->set_complex_eps(complex_eps);
-}
-
-void FDTD_set_mat_arrays(fdtd::FDTD* fdtd,
-                         complex128 *eps_x, complex128 *eps_y, complex128 *eps_z,
-                         complex128 *mu_x, complex128 *mu_y, complex128 *mu_z)
-{
-    fdtd->set_mat_arrays(eps_x, eps_y, eps_z, mu_x, mu_y, mu_z);
 }
 
 void FDTD_update_H(fdtd::FDTD* fdtd, double t)

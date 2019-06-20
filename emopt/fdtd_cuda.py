@@ -258,14 +258,6 @@ class FDTD(MaxwellSolver):
         dt = self._Sc * np.min([dx, dy, dz])/self._R / np.sqrt(3) * min_rindex
         self._dt = dt
 
-        # material arrays -- global since we dont need to pass values around
-        self._eps_x = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
-        self._eps_y = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
-        self._eps_z = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
-        self._mu_x = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
-        self._mu_y = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
-        self._mu_z = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
-
         # Frequency-domain field arrays for forward simulation
         # Two sets of fields for two snapshots in time. The frequency-domain
         # fields are stored in the t0 field set
@@ -304,18 +296,30 @@ class FDTD(MaxwellSolver):
         # Nothing complicated here -- just passing all of the sim parameters
         # and work vectors over to the c library
         self._libfdtd = libFDTD.FDTD_new(Nx, Ny, Nz)
+        # field arrays
         self._Ex = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
         self._Ey = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
         self._Ez = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
         self._Hx = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
         self._Hy = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
         self._Hz = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
+        # material arrays 
+        self._eps_x = np.ctypeslib.as_array(self._libfdtd.contents._eps_x, shape=(Nz*Ny*Nx,))
+        self._eps_y = np.ctypeslib.as_array(self._libfdtd.contents._eps_y, shape=(Nz*Ny*Nx,))
+        self._eps_z = np.ctypeslib.as_array(self._libfdtd.contents._eps_z, shape=(Nz*Ny*Nx,))
+        self._mu_x = np.ctypeslib.as_array(self._libfdtd.contents._mu_x, shape=(Nz*Ny*Nx,))
+        self._mu_y = np.ctypeslib.as_array(self._libfdtd.contents._mu_y, shape=(Nz*Ny*Nx,))
+        self._mu_z = np.ctypeslib.as_array(self._libfdtd.contents._mu_z, shape=(Nz*Ny*Nx,))
+        self._eps_x.dtype = np.complex128
+        self._eps_y.dtype = np.complex128
+        self._eps_z.dtype = np.complex128
+        self._mu_x.dtype = np.complex128
+        self._mu_y.dtype = np.complex128
+        self._mu_z.dtype = np.complex128
+
         libFDTD.FDTD_set_wavelength(self._libfdtd, wavelength)
         libFDTD.FDTD_set_physical_dims(self._libfdtd, X, Y, Z, dx, dy, dz)
         libFDTD.FDTD_set_dt(self._libfdtd, dt)
-        libFDTD.FDTD_set_mat_arrays(self._libfdtd,
-                self._eps_x, self._eps_y, self._eps_z,
-                self._mu_x, self._mu_y, self._mu_z)
 
         # set whether or not materials are complex valued
         libFDTD.FDTD_set_complex_eps(self._libfdtd, complex_eps)
