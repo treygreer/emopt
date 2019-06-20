@@ -57,6 +57,10 @@ fdtd::FDTD::~FDTD()
 	delete[] _Ex; delete[] _Ey; delete[] _Ez;
 	delete[] _Hx; delete[] _Hy; delete[] _Hz;
 
+	// Clean up Material arrays
+	delete[] _eps_x; delete[] _eps_y; delete[] _eps_z;
+	delete[] _mu_x; delete[] _mu_y; delete[] _mu_z;
+
     // Clean up PML arrays
     delete[] _pml_Exy0; delete[] _pml_Exy1; delete[] _pml_Exz0; delete[] _pml_Exz1;
     delete[] _pml_Eyx0; delete[] _pml_Eyx1; delete[] _pml_Eyz0; delete[] _pml_Eyz1;
