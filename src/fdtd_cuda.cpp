@@ -149,10 +149,10 @@ void fdtd::FDTD::update_H(double t)
 				int kill_xwrap = (_bc[0] != 'P' && k == _Nx-1) ? 1 : 0;
 				int kp1 = k==_Nx-1 ? 0 : k+1;
 
-                ind_ijk =   (i+0)*(_Ny+0)*(_Nx+0) + (j+0)*(_Nx+0) + k+0;
-                ind_ijp1k = (i+0)*(_Ny+0)*(_Nx+0) + (jp1)*(_Nx+0) + k+0;
-                ind_ip1jk = (ip1)*(_Ny+0)*(_Nx+0) + (j+0)*(_Nx+0) + k+0;
-                ind_ijkp1 = (i+0)*(_Ny+0)*(_Nx+0) + (j+0)*(_Nx+0) + kp1;
+                ind_ijk =   (i+0)*_Ny*_Nx + (j+0)*_Nx + (k+0);
+                ind_ijp1k = (i+0)*_Ny*_Nx + (jp1)*_Nx + (k+0);
+                ind_ip1jk = (ip1)*_Ny*_Nx + (j+0)*_Nx + (k+0);
+                ind_ijkp1 = (i+0)*_Ny*_Nx + (j+0)*_Nx + (kp1);
 
 				assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
 				assert(ind_ip1jk >= 0 && ind_ip1jk < _Nz*_Ny*_Nx);
@@ -298,7 +298,7 @@ void fdtd::FDTD::update_H(double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
+                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
                     ind_src = i*Js*Ks + j*Ks + k;
 
 					assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
@@ -316,7 +316,7 @@ void fdtd::FDTD::update_H(double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
+                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
                     ind_src = i*Js*Ks + j*Ks + k;
 
 					assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
@@ -334,7 +334,7 @@ void fdtd::FDTD::update_H(double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
+                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
                     ind_src = i*Js*Ks + j*Ks + k;
 
 					assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
@@ -386,10 +386,10 @@ void fdtd::FDTD::update_E(double t)
 									_bc[0] == 'E'           ? ACTION_FLIP : ACTION_COPY);
 				int km1 = k==0 ? _Nx-1 : k-1;
 
-                ind_ijk   = (i-0)*(_Ny)*(_Nx) + (j-0)*(_Nx) + k-0;
-                ind_ijm1k = (i-0)*(_Ny)*(_Nx) + (jm1)*(_Nx) + k-0;
-                ind_im1jk = (im1)*(_Ny)*(_Nx) + (j-0)*(_Nx) + k-0;
-                ind_ijkm1 = (i-0)*(_Ny)*(_Nx) + (j-0)*(_Nx) + km1;
+                ind_ijk   = (i-0)*_Ny*_Nx + (j-0)*_Nx + (k-0);
+                ind_ijm1k = (i-0)*_Ny*_Nx + (jm1)*_Nx + (k-0);
+                ind_im1jk = (im1)*_Ny*_Nx + (j-0)*_Nx + (k-0);
+                ind_ijkm1 = (i-0)*_Ny*_Nx + (j-0)*_Nx + (km1);
 
 				assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
 				assert(ind_im1jk >= 0 && ind_im1jk < _Nz*_Ny*_Nx);
@@ -542,7 +542,7 @@ void fdtd::FDTD::update_E(double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk    = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
+                    ind_ijk    = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
                     ind_src = i*Js*Ks + j*Ks + k;
 
                     b_x = _dt/_eps_x[ind_ijk].real;
@@ -559,7 +559,7 @@ void fdtd::FDTD::update_E(double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
+                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
                     ind_src = i*Js*Ks + j*Ks + k;
 
                     b_y = _dt/_eps_y[ind_ijk].real;
@@ -576,7 +576,7 @@ void fdtd::FDTD::update_E(double t)
         for(int i = 0; i < Is; i++) {
             for(int j = 0; j < Js; j++) {
                 for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*(_Ny)*(_Nx) + (j+j0s)*(_Nx) + k + k0s;
+                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
                     ind_src = i*Js*Ks + j*Ks + k;
 
                     b_z = _dt/_eps_z[ind_ijk].real;
@@ -1039,21 +1039,21 @@ _Hx_t1 = Hx_t1; _Hy_t1 = Hy_t1; _Hz_t1 = Hz_t1;
 
 void fdtd::FDTD::capture_t0_fields()
 {
-    int ind_local;
+    int ind_ijk;
 
     for(int i = 0; i < _Nz; i++) {
         for(int j = 0; j < _Ny; j++) {
             for(int k = 0; k < _Nx; k++) {
-                ind_local = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
+                ind_ijk = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
 
                 // Copy the fields at the current time to the auxillary arrays
-                _Ex_t0[ind_local] = _Ex[ind_local];
-                _Ey_t0[ind_local] = _Ey[ind_local];
-                _Ez_t0[ind_local] = _Ez[ind_local];
+                _Ex_t0[ind_ijk] = _Ex[ind_ijk];
+                _Ey_t0[ind_ijk] = _Ey[ind_ijk];
+                _Ez_t0[ind_ijk] = _Ez[ind_ijk];
 
-                _Hx_t0[ind_local] = _Hx[ind_local];
-                _Hy_t0[ind_local] = _Hy[ind_local];
-                _Hz_t0[ind_local] = _Hz[ind_local];
+                _Hx_t0[ind_ijk] = _Hx[ind_ijk];
+                _Hy_t0[ind_ijk] = _Hy[ind_ijk];
+                _Hz_t0[ind_ijk] = _Hz[ind_ijk];
             }
         }
     }
@@ -1062,21 +1062,21 @@ void fdtd::FDTD::capture_t0_fields()
 
 void fdtd::FDTD::capture_t1_fields()
 {
-    int ind_local;
+    int ind_ijk;
 
     for(int i = 0; i < _Nz; i++) {
         for(int j = 0; j < _Ny; j++) {
             for(int k = 0; k < _Nx; k++) {
-                ind_local = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
+                ind_ijk = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
 
                 // Copy the fields at the current time to the auxillary arrays
-                _Ex_t1[ind_local] = _Ex[ind_local];
-                _Ey_t1[ind_local] = _Ey[ind_local];
-                _Ez_t1[ind_local] = _Ez[ind_local];
+                _Ex_t1[ind_ijk] = _Ex[ind_ijk];
+                _Ey_t1[ind_ijk] = _Ey[ind_ijk];
+                _Ez_t1[ind_ijk] = _Ez[ind_ijk];
 
-                _Hx_t1[ind_local] = _Hx[ind_local];
-                _Hy_t1[ind_local] = _Hy[ind_local];
-                _Hz_t1[ind_local] = _Hz[ind_local];
+                _Hx_t1[ind_ijk] = _Hx[ind_ijk];
+                _Hy_t1[ind_ijk] = _Hy[ind_ijk];
+                _Hz_t1[ind_ijk] = _Hz[ind_ijk];
             }
         }
     }
@@ -1086,7 +1086,7 @@ void fdtd::FDTD::capture_t1_fields()
 void fdtd::FDTD::calc_complex_fields(double t0, double t1)
 {
     double f0, f1, phi, A, t0H, t1H;
-    int ind_local;
+    int ind_ijk;
 
     t0H = t0 - 0.5*_dt;
     t1H = t1 - 0.5*_dt;
@@ -1094,80 +1094,80 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
     for(int i = 0; i < _Nz; i++) {
         for(int j = 0; j < _Ny; j++) {
             for(int k = 0; k < _Nx; k++) {
-                ind_local = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
+                ind_ijk = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
 
                 // Compute amplitude and phase for Ex
                 // Note: we are careful to assume exp(-i*w*t) time dependence
-                f0 = _Ex_t0[ind_local].real;
-                f1 = _Ex[ind_local];
+                f0 = _Ex_t0[ind_ijk].real;
+                f1 = _Ex[ind_ijk];
                 phi = calc_phase(t0, t1, f0, f1);
                 A = calc_amplitude(t0, t1, f0, f1, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ex_t0[ind_local].real = A*cos(phi);
-                _Ex_t0[ind_local].imag = -A*sin(phi);
+                _Ex_t0[ind_ijk].real = A*cos(phi);
+                _Ex_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Ey
-                f0 = _Ey_t0[ind_local].real;
-                f1 = _Ey[ind_local];
+                f0 = _Ey_t0[ind_ijk].real;
+                f1 = _Ey[ind_ijk];
                 phi = calc_phase(t0, t1, f0, f1);
                 A = calc_amplitude(t0, t1, f0, f1, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ey_t0[ind_local].real = A*cos(phi);
-                _Ey_t0[ind_local].imag = -A*sin(phi);
+                _Ey_t0[ind_ijk].real = A*cos(phi);
+                _Ey_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Ez
-                f0 = _Ez_t0[ind_local].real;
-                f1 = _Ez[ind_local];
+                f0 = _Ez_t0[ind_ijk].real;
+                f1 = _Ez[ind_ijk];
                 phi = calc_phase(t0, t1, f0, f1);
                 A = calc_amplitude(t0, t1, f0, f1, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ez_t0[ind_local].real = A*cos(phi);
-                _Ez_t0[ind_local].imag = -A*sin(phi);
+                _Ez_t0[ind_ijk].real = A*cos(phi);
+                _Ez_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Hx
-                f0 = _Hx_t0[ind_local].real;
-                f1 = _Hx[ind_local];
+                f0 = _Hx_t0[ind_ijk].real;
+                f1 = _Hx[ind_ijk];
                 phi = calc_phase(t0H, t1H, f0, f1);
                 A = calc_amplitude(t0H, t1H, f0, f1, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hx_t0[ind_local].real = A*cos(phi);
-                _Hx_t0[ind_local].imag = -A*sin(phi);
+                _Hx_t0[ind_ijk].real = A*cos(phi);
+                _Hx_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Hy
-                f0 = _Hy_t0[ind_local].real;
-                f1 = _Hy[ind_local];
+                f0 = _Hy_t0[ind_ijk].real;
+                f1 = _Hy[ind_ijk];
                 phi = calc_phase(t0H, t1H, f0, f1);
                 A = calc_amplitude(t0H, t1H, f0, f1, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hy_t0[ind_local].real = A*cos(phi);
-                _Hy_t0[ind_local].imag = -A*sin(phi);
+                _Hy_t0[ind_ijk].real = A*cos(phi);
+                _Hy_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Hz
-                f0 = _Hz_t0[ind_local].real;
-                f1 = _Hz[ind_local];
+                f0 = _Hz_t0[ind_ijk].real;
+                f1 = _Hz[ind_ijk];
                 phi = calc_phase(t0H, t1H, f0, f1);
                 A = calc_amplitude(t0H, t1H, f0, f1, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hz_t0[ind_local].real = A*cos(phi);
-                _Hz_t0[ind_local].imag = -A*sin(phi);
+                _Hz_t0[ind_ijk].real = A*cos(phi);
+                _Hz_t0[ind_ijk].imag = -A*sin(phi);
             }
         }
     }
@@ -1178,7 +1178,7 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
 void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
 {
     double f0, f1, f2, phi, A, t0H, t1H, t2H;
-    int ind_local;
+    int ind_ijk;
 
     t0H = t0 - 0.5*_dt;
     t1H = t1 - 0.5*_dt;
@@ -1187,86 +1187,86 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
     for(int i = 0; i < _Nz; i++) {
         for(int j = 0; j < _Ny; j++) {
             for(int k = 0; k < _Nx; k++) {
-                ind_local = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
+                ind_ijk = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
 
                 // Compute amplitude and phase for Ex
                 // Note: we are careful to assume exp(-i*w*t) time dependence
-                f0 = _Ex_t0[ind_local].real;
-                f1 = _Ex_t1[ind_local].real;
-                f2 = _Ex[ind_local];
+                f0 = _Ex_t0[ind_ijk].real;
+                f1 = _Ex_t1[ind_ijk].real;
+                f2 = _Ex[ind_ijk];
                 phi = calc_phase(t0, t1, t2, f0, f1, f2);
                 A = calc_amplitude(t0, t1, t2, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ex_t0[ind_local].real = A*cos(phi);
-                _Ex_t0[ind_local].imag = -A*sin(phi);
+                _Ex_t0[ind_ijk].real = A*cos(phi);
+                _Ex_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Ey
-                f0 = _Ey_t0[ind_local].real;
-                f1 = _Ey_t1[ind_local].real;
-                f2 = _Ey[ind_local];
+                f0 = _Ey_t0[ind_ijk].real;
+                f1 = _Ey_t1[ind_ijk].real;
+                f2 = _Ey[ind_ijk];
                 phi = calc_phase(t0, t1, t2, f0, f1, f2);
                 A = calc_amplitude(t0, t1, t2, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ey_t0[ind_local].real = A*cos(phi);
-                _Ey_t0[ind_local].imag = -A*sin(phi);
+                _Ey_t0[ind_ijk].real = A*cos(phi);
+                _Ey_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Ez
-                f0 = _Ez_t0[ind_local].real;
-                f1 = _Ez_t1[ind_local].real;
-                f2 = _Ez[ind_local];
+                f0 = _Ez_t0[ind_ijk].real;
+                f1 = _Ez_t1[ind_ijk].real;
+                f2 = _Ez[ind_ijk];
                 phi = calc_phase(t0, t1, t2, f0, f1, f2);
                 A = calc_amplitude(t0, t1, t2, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Ez_t0[ind_local].real = A*cos(phi);
-                _Ez_t0[ind_local].imag = -A*sin(phi);
+                _Ez_t0[ind_ijk].real = A*cos(phi);
+                _Ez_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Hx
-                f0 = _Hx_t0[ind_local].real;
-                f1 = _Hx_t1[ind_local].real;
-                f2 = _Hx[ind_local];
+                f0 = _Hx_t0[ind_ijk].real;
+                f1 = _Hx_t1[ind_ijk].real;
+                f2 = _Hx[ind_ijk];
                 phi = calc_phase(t0H, t1H, t2H, f0, f1, f2);
                 A = calc_amplitude(t0H, t1H, t2H, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hx_t0[ind_local].real = A*cos(phi);
-                _Hx_t0[ind_local].imag = -A*sin(phi);
+                _Hx_t0[ind_ijk].real = A*cos(phi);
+                _Hx_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Hy
-                f0 = _Hy_t0[ind_local].real;
-                f1 = _Hy_t1[ind_local].real;
-                f2 = _Hy[ind_local];
+                f0 = _Hy_t0[ind_ijk].real;
+                f1 = _Hy_t1[ind_ijk].real;
+                f2 = _Hy[ind_ijk];
                 phi = calc_phase(t0H, t1H, t2H, f0, f1, f2);
                 A = calc_amplitude(t0H, t1H, t2H, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hy_t0[ind_local].real = A*cos(phi);
-                _Hy_t0[ind_local].imag = -A*sin(phi);
+                _Hy_t0[ind_ijk].real = A*cos(phi);
+                _Hy_t0[ind_ijk].imag = -A*sin(phi);
 
                 // Hz
-                f0 = _Hz_t0[ind_local].real;
-                f1 = _Hz_t1[ind_local].real;
-                f2 = _Hz[ind_local];
+                f0 = _Hz_t0[ind_ijk].real;
+                f1 = _Hz_t1[ind_ijk].real;
+                f2 = _Hz[ind_ijk];
                 phi = calc_phase(t0H, t1H, t2H, f0, f1, f2);
                 A = calc_amplitude(t0H, t1H, t2H, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
                 }
-                _Hz_t0[ind_local].real = A*cos(phi);
-                _Hz_t0[ind_local].imag = -A*sin(phi);
+                _Hz_t0[ind_ijk].real = A*cos(phi);
+                _Hz_t0[ind_ijk].imag = -A*sin(phi);
 
             }
         }
