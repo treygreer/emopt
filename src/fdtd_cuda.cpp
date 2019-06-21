@@ -3,6 +3,8 @@
 #include <algorithm>
 #undef NDEBUG
 #include <assert.h>
+#include <cuda.h>
+#include <cuda_runtime_api.h>
 
 fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 {
@@ -12,7 +14,7 @@ fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 
 	// Allocate field arrays
 	int N = Nz * Ny * Nx;
-	_Ex = new double[N];
+	cudaMallocManaged((void **)&_Ex, N*sizeof(double));
 	_Ey = new double[N];
 	_Ez = new double[N];
 	_Hx = new double[N];
@@ -54,7 +56,8 @@ fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 fdtd::FDTD::~FDTD()
 {
 	// Clean up Field arrays
-	delete[] _Ex; delete[] _Ey; delete[] _Ez;
+	cudaFree(_Ex);
+	delete[] _Ey; delete[] _Ez;
 	delete[] _Hx; delete[] _Hy; delete[] _Hz;
 
 	// Clean up Material arrays
