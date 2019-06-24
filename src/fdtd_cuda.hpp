@@ -317,6 +317,8 @@ namespace fdtd {
              * \param t - The time of the update = n*dt+1/2*dt.
              */
             void update_E(double t);
+		//__global__ void update_E_fields(double t);
+            void update_E_sources(double t);
 
             // PML configuration
             /*!

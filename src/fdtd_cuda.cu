@@ -29,6 +29,8 @@ fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 	cudaMallocManaged((void **)&_mu_y, N*sizeof(complex128));
 	cudaMallocManaged((void **)&_mu_z, N*sizeof(complex128));
 
+	std::cout << "after malloc, _mu_z: " << _mu_z << std::endl;	
+
     // make sure all of our PML arrays start NULL
     _pml_Exy0 = NULL; _pml_Exy1 = NULL; _pml_Exz0 = NULL; _pml_Exz1 = NULL;
     _pml_Eyx0 = NULL; _pml_Eyx1 = NULL; _pml_Eyz0 = NULL; _pml_Eyz1 = NULL;
@@ -64,36 +66,36 @@ fdtd::FDTD::~FDTD()
 	cudaFree(_mu_x); cudaFree(_mu_y); cudaFree(_mu_z);
 
     // Clean up PML arrays
-    delete[] _pml_Exy0; delete[] _pml_Exy1; delete[] _pml_Exz0; delete[] _pml_Exz1;
-    delete[] _pml_Eyx0; delete[] _pml_Eyx1; delete[] _pml_Eyz0; delete[] _pml_Eyz1;
-    delete[] _pml_Ezx0; delete[] _pml_Ezx1; delete[] _pml_Ezy0; delete[] _pml_Ezy1;
-    delete[] _pml_Hxy0; delete[] _pml_Hxy1; delete[] _pml_Hxz0; delete[] _pml_Hxz1;
-    delete[] _pml_Hyx0; delete[] _pml_Hyx1; delete[] _pml_Hyz0; delete[] _pml_Hyz1;
-    delete[] _pml_Hzx0; delete[] _pml_Hzx1; delete[] _pml_Hzy0; delete[] _pml_Hzy1;
+    cudaFree(_pml_Exy0); cudaFree(_pml_Exy1); cudaFree(_pml_Exz0); cudaFree(_pml_Exz1);
+    cudaFree(_pml_Eyx0); cudaFree(_pml_Eyx1); cudaFree(_pml_Eyz0); cudaFree(_pml_Eyz1);
+    cudaFree(_pml_Ezx0); cudaFree(_pml_Ezx1); cudaFree(_pml_Ezy0); cudaFree(_pml_Ezy1);
+    cudaFree(_pml_Hxy0); cudaFree(_pml_Hxy1); cudaFree(_pml_Hxz0); cudaFree(_pml_Hxz1);
+    cudaFree(_pml_Hyx0); cudaFree(_pml_Hyx1); cudaFree(_pml_Hyz0); cudaFree(_pml_Hyz1);
+    cudaFree(_pml_Hzx0); cudaFree(_pml_Hzx1); cudaFree(_pml_Hzy0); cudaFree(_pml_Hzy1);
 
-    delete [] _kappa_H_x;
-    delete [] _kappa_H_y;
-    delete [] _kappa_H_z;
+    cudaFree(_kappa_H_x);
+    cudaFree(_kappa_H_y);
+    cudaFree(_kappa_H_z);
 
-    delete [] _kappa_E_x;
-    delete [] _kappa_E_y;
-    delete [] _kappa_E_z;
+    cudaFree(_kappa_E_x);
+    cudaFree(_kappa_E_y);
+    cudaFree(_kappa_E_z);
 
-    delete [] _bHx;
-    delete [] _bHy;
-    delete [] _bHz;
+    cudaFree(_bHx);
+    cudaFree(_bHy);
+    cudaFree(_bHz);
 
-    delete [] _bEx;
-    delete [] _bEy;
-    delete [] _bEz;
+    cudaFree(_bEx);
+    cudaFree(_bEy);
+    cudaFree(_bEz);
 
-    delete [] _cHx;
-    delete [] _cHy;
-    delete [] _cHz;
+    cudaFree(_cHx);
+    cudaFree(_cHy);
+    cudaFree(_cHz);
 
-    delete [] _cEx;
-    delete [] _cEy;
-    delete [] _cEz;
+    cudaFree(_cEx);
+    cudaFree(_cEy);
+    cudaFree(_cEz);
 }
 
 void fdtd::FDTD::set_physical_dims(double X, double Y, double Z,
@@ -351,186 +353,200 @@ void fdtd::FDTD::update_H(double t)
     }
 }
 
-void fdtd::FDTD::update_E(double t)
+enum action { ACTION_NOP, ACTION_ZERO, ACTION_FLIP, ACTION_COPY };
+
+__global__
+void update_E_fields(double t, double R,
+					 int Nx, int Ny, int Nz,
+					 double dx, double dy, double dz, double dt,
+					 char bc0, char bc1, char bc2,
+					 int w_pml_x0, int w_pml_x1,
+					 int w_pml_y0, int w_pml_y1,
+					 int w_pml_z0, int w_pml_z1,
+					 double *Ex, double *Ey, double *Ez,
+					 double *Hx, double *Hy, double *Hz,
+					 complex128 *eps_x, complex128 *eps_y, complex128 *eps_z,
+					 double *pml_Hxy0, double *pml_Hxy1, double *pml_Hxz0, double *pml_Hxz1,
+					 double *pml_Hyx0, double *pml_Hyx1, double *pml_Hyz0, double *pml_Hyz1,
+					 double *pml_Hzx0, double *pml_Hzx1, double *pml_Hzy0, double *pml_Hzy1,
+					 double *kappa_E_x, double *kappa_E_y, double *kappa_E_z,
+					 double *bEx, double *bEy, double *bEz,
+					 double *cEx, double *cEy, double *cEz
+	)
 {
-    double odx = _R/_dx,
-           ody = _R/_dy,
-           odz = _R/_dz,
-           b, C, kappa,
-           src_t,
-           a_x, a_y, a_z, b_x, b_y, b_z;
+    double odx = R/dx,
+           ody = R/dy,
+		   odz = R/dz,
+		b_x, b_y, b_z;
 
-    int pml_xmin = _w_pml_x0, pml_xmax = _Nx-_w_pml_x1,
-        pml_ymin = _w_pml_y0, pml_ymax = _Ny-_w_pml_y1,
-        pml_zmin = _w_pml_z0, pml_zmax = _Nz-_w_pml_z1;
-
-    int ind_ijk, ind_im1jk, ind_ijm1k, ind_ijkm1,
-        ind_pml, ind_src, i0s, j0s, k0s, Is, Js, Ks,
-        ind_pml_param;
+    int ind_ijk, ind_im1jk, ind_ijm1k, ind_ijkm1, ind_pml, ind_pml_param;
 
     double dHxdy, dHxdz, dHydx, dHydz, dHzdx, dHzdy;
-    complex128 *Jx, *Jy, *Jz;
-    enum action { ACTION_NOP, ACTION_ZERO, ACTION_FLIP, ACTION_COPY };
 
-    for(int i = 0; i < _Nz; i++) {
-        int action_zwrap = (_bc[2] == 'P' || i != 0 ? ACTION_NOP :
-							_bc[2] == '0'           ? ACTION_ZERO :
-							_bc[2] == 'E'           ? ACTION_FLIP : ACTION_COPY);
-		int im1 = i==0 ? _Nz-1 : i-1;
-        for(int j = 0; j < _Ny; j++) {
-			int action_ywrap = (_bc[1] == 'P' || j != 0 ? ACTION_NOP :
-								_bc[1] == '0'           ? ACTION_ZERO :
-								_bc[1] == 'E'           ? ACTION_FLIP : ACTION_COPY);
-			int jm1 = j==0 ? _Ny-1 : j-1;
-			for(int k = 0; k < _Nx; k++) {
-				int action_xwrap = (_bc[0] == 'P' || k != 0 ? ACTION_NOP :
-									_bc[0] == '0'           ? ACTION_ZERO :
-									_bc[0] == 'E'           ? ACTION_FLIP : ACTION_COPY);
-				int km1 = k==0 ? _Nx-1 : k-1;
+    double b, C, kappa;
 
-                ind_ijk   = (i-0)*_Ny*_Nx + (j-0)*_Nx + (k-0);
-                ind_ijm1k = (i-0)*_Ny*_Nx + (jm1)*_Nx + (k-0);
-                ind_im1jk = (im1)*_Ny*_Nx + (j-0)*_Nx + (k-0);
-                ind_ijkm1 = (i-0)*_Ny*_Nx + (j-0)*_Nx + (km1);
+    int pml_xmin = w_pml_x0, pml_xmax = Nx-w_pml_x1,
+        pml_ymin = w_pml_y0, pml_ymax = Ny-w_pml_y1,
+        pml_zmin = w_pml_z0, pml_zmax = Nz-w_pml_z1;
 
-				assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-				assert(ind_im1jk >= 0 && ind_im1jk < _Nz*_Ny*_Nx);
-				assert(ind_ijm1k >= 0 && ind_ijm1k < _Nz*_Ny*_Nx);
-				assert(ind_ijkm1 >= 0 && ind_ijkm1 < _Nz*_Ny*_Nx);
+    for(int i = 0; i < Nz; i++) {
+        int action_zwrap = (bc2 == 'P' || i != 0 ? ACTION_NOP :
+							bc2 == '0'           ? ACTION_ZERO :
+							bc2 == 'E'           ? ACTION_FLIP : ACTION_COPY);
+		int im1 = i==0 ? Nz-1 : i-1;
+        for(int j = 0; j < Ny; j++) {
+			int action_ywrap = (bc1 == 'P' || j != 0 ? ACTION_NOP :
+								bc1 == '0'           ? ACTION_ZERO :
+								bc1 == 'E'           ? ACTION_FLIP : ACTION_COPY);
+			int jm1 = j==0 ? Ny-1 : j-1;
+			for(int k = 0; k < Nx; k++) {
+				int action_xwrap = (bc0 == 'P' || k != 0 ? ACTION_NOP :
+									bc0 == '0'           ? ACTION_ZERO :
+									bc0 == 'E'           ? ACTION_FLIP : ACTION_COPY);
+				int km1 = k==0 ? Nx-1 : k-1;
 
-                a_x = 1.0; a_y = 1.0; a_z = 1.0;
-                b_x = _dt/_eps_x[ind_ijk].real;
-                b_y = _dt/_eps_y[ind_ijk].real;
-                b_z = _dt/_eps_z[ind_ijk].real;
+                ind_ijk   = (i-0)*Ny*Nx + (j-0)*Nx + (k-0);
+                ind_ijm1k = (i-0)*Ny*Nx + (jm1)*Nx + (k-0);
+                ind_im1jk = (im1)*Ny*Nx + (j-0)*Nx + (k-0);
+                ind_ijkm1 = (i-0)*Ny*Nx + (j-0)*Nx + (km1);
+
+                b_x = dt/eps_x[ind_ijk].real;
+                b_y = dt/eps_y[ind_ijk].real;
+                b_z = dt/eps_z[ind_ijk].real;
 
                 // Update Ex
-                dHzdy = ody*(_Hz[ind_ijk] - (action_ywrap == ACTION_ZERO ? 0 :
-					     action_ywrap == ACTION_COPY ?  _Hz[ind_ijk] :
-					     action_ywrap == ACTION_FLIP ? -_Hz[ind_ijk] : _Hz[ind_ijm1k]));
-                dHydz = odz*(_Hy[ind_ijk] - (action_zwrap == ACTION_ZERO ? 0 :
-					     action_zwrap == ACTION_COPY ?  _Hy[ind_ijk] :
-					     action_zwrap == ACTION_FLIP ? -_Hy[ind_ijk] : _Hy[ind_im1jk]));
-
-                _Ex[ind_ijk] = a_x*_Ex[ind_ijk] + (dHzdy - dHydz) * b_x;
+                dHzdy = ody*(Hz[ind_ijk] - (action_ywrap == ACTION_ZERO ? 0 :
+					     action_ywrap == ACTION_COPY ?  Hz[ind_ijk] :
+					     action_ywrap == ACTION_FLIP ? -Hz[ind_ijk] : Hz[ind_ijm1k]));
+                dHydz = odz*(Hy[ind_ijk] - (action_zwrap == ACTION_ZERO ? 0 :
+					     action_zwrap == ACTION_COPY ?  Hy[ind_ijk] :
+					     action_zwrap == ACTION_FLIP ? -Hy[ind_ijk] : Hy[ind_im1jk]));
+                Ex[ind_ijk] = Ex[ind_ijk] + (dHzdy - dHydz) * b_x;
 
                 // Update Ey
-                dHxdz = odz*(_Hx[ind_ijk] - (action_zwrap == ACTION_ZERO ? 0 :
-					     action_zwrap == ACTION_COPY ?  _Hx[ind_ijk] :
-					     action_zwrap == ACTION_FLIP ? -_Hx[ind_ijk] : _Hx[ind_im1jk]));
-                dHzdx = odx*(_Hz[ind_ijk] - (action_xwrap == ACTION_ZERO ? 0 :
-					     action_xwrap == ACTION_COPY ?  _Hz[ind_ijk] :
-					     action_xwrap == ACTION_FLIP ? -_Hz[ind_ijk] : _Hz[ind_ijkm1]));
-
-                _Ey[ind_ijk] = a_y * _Ey[ind_ijk] + (dHxdz - dHzdx) * b_y;
+                dHxdz = odz*(Hx[ind_ijk] - (action_zwrap == ACTION_ZERO ? 0 :
+					     action_zwrap == ACTION_COPY ?  Hx[ind_ijk] :
+					     action_zwrap == ACTION_FLIP ? -Hx[ind_ijk] : Hx[ind_im1jk]));
+                dHzdx = odx*(Hz[ind_ijk] - (action_xwrap == ACTION_ZERO ? 0 :
+					     action_xwrap == ACTION_COPY ?  Hz[ind_ijk] :
+					     action_xwrap == ACTION_FLIP ? -Hz[ind_ijk] : Hz[ind_ijkm1]));
+                Ey[ind_ijk] = Ey[ind_ijk] + (dHxdz - dHzdx) * b_y;
 
                 // Update Ez
-                dHydx = odx*(_Hy[ind_ijk] - (action_xwrap == ACTION_ZERO ? 0 :
-					     action_xwrap == ACTION_COPY ?  _Hy[ind_ijk] :
-					     action_xwrap == ACTION_FLIP ? -_Hy[ind_ijk] : _Hy[ind_ijkm1]));
-                dHxdy = ody*(_Hx[ind_ijk] - (action_ywrap == ACTION_ZERO ? 0 :
-					     action_ywrap == ACTION_COPY ?  _Hx[ind_ijk] :
-					     action_ywrap == ACTION_FLIP ? -_Hx[ind_ijk] : _Hx[ind_ijm1k]));
-
-                _Ez[ind_ijk] = a_z * _Ez[ind_ijk] + (dHydx - dHxdy) * b_z;
-
+                dHydx = odx*(Hy[ind_ijk] - (action_xwrap == ACTION_ZERO ? 0 :
+					     action_xwrap == ACTION_COPY ?  Hy[ind_ijk] :
+					     action_xwrap == ACTION_FLIP ? -Hy[ind_ijk] : Hy[ind_ijkm1]));
+                dHxdy = ody*(Hx[ind_ijk] - (action_ywrap == ACTION_ZERO ? 0 :
+					     action_ywrap == ACTION_COPY ?  Hx[ind_ijk] :
+					     action_ywrap == ACTION_FLIP ? -Hx[ind_ijk] : Hx[ind_ijm1k]));
+                Ez[ind_ijk] = Ez[ind_ijk] + (dHydx - dHxdy) * b_z;
 
                 // Do PML updates
                 if(k < pml_xmin) {
-                    ind_pml = i*_Ny*(pml_xmin) +j*(pml_xmin) + k;
+                    ind_pml = i*Ny*(pml_xmin) +j*(pml_xmin) + k;
 
                     // get PML coefficients
                     ind_pml_param = pml_xmin - k - 1;
-                    kappa = _kappa_E_x[ind_pml_param];
-                    b = _bEx[ind_pml_param];
-                    C = _cEx[ind_pml_param];
+                    kappa = kappa_E_x[ind_pml_param];
+                    b = bEx[ind_pml_param];
+                    C = cEx[ind_pml_param];
 
-                    _pml_Hyx0[ind_pml] = C * dHydx + b*_pml_Hyx0[ind_pml];
-                    _pml_Hzx0[ind_pml] = C * dHzdx + b*_pml_Hzx0[ind_pml];
+                    pml_Hyx0[ind_pml] = C * dHydx + b*pml_Hyx0[ind_pml];
+                    pml_Hzx0[ind_pml] = C * dHzdx + b*pml_Hzx0[ind_pml];
 
-                    _Ez[ind_ijk] = _Ez[ind_ijk] + (_pml_Hyx0[ind_pml]-dHydx+dHydx/kappa) * b_z;
-                    _Ey[ind_ijk] = _Ey[ind_ijk] - (_pml_Hzx0[ind_pml]-dHzdx+dHzdx/kappa) * b_y;
+                    Ez[ind_ijk] = Ez[ind_ijk] + (pml_Hyx0[ind_pml]-dHydx+dHydx/kappa) * b_z;
+                    Ey[ind_ijk] = Ey[ind_ijk] - (pml_Hzx0[ind_pml]-dHzdx+dHzdx/kappa) * b_y;
 
                 }
                 else if(k >= pml_xmax) {
-                    ind_pml = i*_Ny*(_Nx - pml_xmax) +j*(_Nx - pml_xmax) + k - pml_xmax;
+                    ind_pml = i*Ny*(Nx - pml_xmax) +j*(Nx - pml_xmax) + k - pml_xmax;
 
                     // get coefficients
-                    ind_pml_param = k - pml_xmax + _w_pml_x0;
-                    kappa = _kappa_E_x[ind_pml_param];
-                    b = _bEx[ind_pml_param];
-                    C = _cEx[ind_pml_param];
+                    ind_pml_param = k - pml_xmax + w_pml_x0;
+                    kappa = kappa_E_x[ind_pml_param];
+                    b = bEx[ind_pml_param];
+                    C = cEx[ind_pml_param];
 
-                    _pml_Hyx1[ind_pml] = C * dHydx + b*_pml_Hyx1[ind_pml];
-                    _pml_Hzx1[ind_pml] = C * dHzdx + b*_pml_Hzx1[ind_pml];
+                    pml_Hyx1[ind_pml] = C * dHydx + b*pml_Hyx1[ind_pml];
+                    pml_Hzx1[ind_pml] = C * dHzdx + b*pml_Hzx1[ind_pml];
 
-                    _Ez[ind_ijk] = _Ez[ind_ijk] + (_pml_Hyx1[ind_pml]-dHydx+dHydx/kappa) * b_z;
-                    _Ey[ind_ijk] = _Ey[ind_ijk] - (_pml_Hzx1[ind_pml]-dHzdx+dHzdx/kappa) * b_y;
+                    Ez[ind_ijk] = Ez[ind_ijk] + (pml_Hyx1[ind_pml]-dHydx+dHydx/kappa) * b_z;
+                    Ey[ind_ijk] = Ey[ind_ijk] - (pml_Hzx1[ind_pml]-dHzdx+dHzdx/kappa) * b_y;
                 }
 
                 if(j < pml_ymin) {
-                    ind_pml = i*pml_ymin*_Nx +j*_Nx + k;
+                    ind_pml = i*pml_ymin*Nx +j*Nx + k;
 
                     // get coefficients
                     ind_pml_param = pml_ymin - j - 1;
-                    kappa = _kappa_E_y[ind_pml_param];
-                    b = _bEy[ind_pml_param];
-                    C = _cEy[ind_pml_param];
+                    kappa = kappa_E_y[ind_pml_param];
+                    b = bEy[ind_pml_param];
+                    C = cEy[ind_pml_param];
 
-                    _pml_Hxy0[ind_pml] = C * dHxdy + b*_pml_Hxy0[ind_pml];
-                    _pml_Hzy0[ind_pml] = C * dHzdy + b*_pml_Hzy0[ind_pml];
+                    pml_Hxy0[ind_pml] = C * dHxdy + b*pml_Hxy0[ind_pml];
+                    pml_Hzy0[ind_pml] = C * dHzdy + b*pml_Hzy0[ind_pml];
 
-                    _Ez[ind_ijk] = _Ez[ind_ijk] - (_pml_Hxy0[ind_pml]-dHxdy+dHxdy/kappa) * b_z;
-                    _Ex[ind_ijk] = _Ex[ind_ijk] + (_pml_Hzy0[ind_pml]-dHzdy+dHzdy/kappa) * b_x;
+                    Ez[ind_ijk] = Ez[ind_ijk] - (pml_Hxy0[ind_pml]-dHxdy+dHxdy/kappa) * b_z;
+                    Ex[ind_ijk] = Ex[ind_ijk] + (pml_Hzy0[ind_pml]-dHzdy+dHzdy/kappa) * b_x;
                 }
                 else if(j >= pml_ymax) {
-                    ind_pml = i*(_Ny - pml_ymax)*_Nx +(j - pml_ymax)*_Nx + k;
+                    ind_pml = i*(Ny - pml_ymax)*Nx +(j - pml_ymax)*Nx + k;
 
                     // get coefficients
-                    ind_pml_param = j - pml_ymax + _w_pml_y0;
-                    kappa = _kappa_E_y[ind_pml_param];
-                    b = _bEy[ind_pml_param];
-                    C = _cEy[ind_pml_param];
+                    ind_pml_param = j - pml_ymax + w_pml_y0;
+                    kappa = kappa_E_y[ind_pml_param];
+                    b = bEy[ind_pml_param];
+                    C = cEy[ind_pml_param];
 
-                    _pml_Hxy1[ind_pml] = C * dHxdy + b*_pml_Hxy1[ind_pml];
-                    _pml_Hzy1[ind_pml] = C * dHzdy + b*_pml_Hzy1[ind_pml];
+                    pml_Hxy1[ind_pml] = C * dHxdy + b*pml_Hxy1[ind_pml];
+                    pml_Hzy1[ind_pml] = C * dHzdy + b*pml_Hzy1[ind_pml];
 
-                    _Ez[ind_ijk] = _Ez[ind_ijk] - (_pml_Hxy1[ind_pml]-dHxdy+dHxdy/kappa) * b_z;
-                    _Ex[ind_ijk] = _Ex[ind_ijk] + (_pml_Hzy1[ind_pml]-dHzdy+dHzdy/kappa) * b_x;
+                    Ez[ind_ijk] = Ez[ind_ijk] - (pml_Hxy1[ind_pml]-dHxdy+dHxdy/kappa) * b_z;
+                    Ex[ind_ijk] = Ex[ind_ijk] + (pml_Hzy1[ind_pml]-dHzdy+dHzdy/kappa) * b_x;
                 }
 
                 if(i < pml_zmin) {
-                    ind_pml = i*_Ny*_Nx +j*_Nx + k;
+                    ind_pml = i*Ny*Nx +j*Nx + k;
 
                     // get coefficients
                     ind_pml_param = pml_zmin - i - 1;
-                    kappa = _kappa_E_z[ind_pml_param];
-                    b = _bEz[ind_pml_param];
-                    C = _cEz[ind_pml_param];
+                    kappa = kappa_E_z[ind_pml_param];
+                    b = bEz[ind_pml_param];
+                    C = cEz[ind_pml_param];
 
-                    _pml_Hxz0[ind_pml] = C * dHxdz + b*_pml_Hxz0[ind_pml];
-                    _pml_Hyz0[ind_pml] = C * dHydz + b*_pml_Hyz0[ind_pml];
+                    pml_Hxz0[ind_pml] = C * dHxdz + b*pml_Hxz0[ind_pml];
+                    pml_Hyz0[ind_pml] = C * dHydz + b*pml_Hyz0[ind_pml];
 
-                    _Ex[ind_ijk] = _Ex[ind_ijk] - (_pml_Hyz0[ind_pml]-dHydz+dHydz/kappa) * b_x;
-                    _Ey[ind_ijk] = _Ey[ind_ijk] + (_pml_Hxz0[ind_pml]-dHxdz+dHxdz/kappa) * b_y;
+                    Ex[ind_ijk] = Ex[ind_ijk] - (pml_Hyz0[ind_pml]-dHydz+dHydz/kappa) * b_x;
+                    Ey[ind_ijk] = Ey[ind_ijk] + (pml_Hxz0[ind_pml]-dHxdz+dHxdz/kappa) * b_y;
                 }
                 else if(i > pml_zmax) {
-                    ind_pml = (i - pml_zmax)*_Ny*_Nx +j*_Nx + k;
+                    ind_pml = (i - pml_zmax)*Ny*Nx +j*Nx + k;
 
                     // compute coefficients
-                    ind_pml_param = i - pml_zmax + _w_pml_z0;
-                    kappa = _kappa_E_z[ind_pml_param];
-                    b = _bEz[ind_pml_param];
-                    C = _cEz[ind_pml_param];
+                    ind_pml_param = i - pml_zmax + w_pml_z0;
+                    kappa = kappa_E_z[ind_pml_param];
+                    b = bEz[ind_pml_param];
+                    C = cEz[ind_pml_param];
 
-                    _pml_Hxz1[ind_pml] = C * dHxdz + b*_pml_Hxz1[ind_pml];
-                    _pml_Hyz1[ind_pml] = C * dHydz + b*_pml_Hyz1[ind_pml];
+                    pml_Hxz1[ind_pml] = C * dHxdz + b*pml_Hxz1[ind_pml];
+                    pml_Hyz1[ind_pml] = C * dHydz + b*pml_Hyz1[ind_pml];
 
-                    _Ex[ind_ijk] = _Ex[ind_ijk] - (_pml_Hyz1[ind_pml]-dHydz+dHydz/kappa) * b_x;
-                    _Ey[ind_ijk] = _Ey[ind_ijk] + (_pml_Hxz1[ind_pml]-dHxdz+dHxdz/kappa) * b_y;
+                    Ex[ind_ijk] = Ex[ind_ijk] - (pml_Hyz1[ind_pml]-dHydz+dHydz/kappa) * b_x;
+                    Ey[ind_ijk] = Ey[ind_ijk] + (pml_Hxz1[ind_pml]-dHxdz+dHxdz/kappa) * b_y;
                 }
             }
         }
     }
+}
+
+void fdtd::FDTD::update_E_sources(double t)
+{
+    int ind_ijk, 
+        ind_src, i0s, j0s, k0s, Is, Js, Ks;
+
+    complex128 *Jx, *Jy, *Jz;
+    double src_t;
 
     // Update sources
     for(auto const& src : _sources) {
@@ -547,7 +563,7 @@ void fdtd::FDTD::update_E(double t)
                     ind_ijk    = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
                     ind_src = i*Js*Ks + j*Ks + k;
 
-                    b_x = _dt/_eps_x[ind_ijk].real;
+                    double b_x = _dt/_eps_x[ind_ijk].real;
 
                     src_t = src_func_t(t, Jx[ind_src].imag);
                     _Ex[ind_ijk] = _Ex[ind_ijk] - src_t * Jx[ind_src].real * b_x;
@@ -564,7 +580,7 @@ void fdtd::FDTD::update_E(double t)
                     ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
                     ind_src = i*Js*Ks + j*Ks + k;
 
-                    b_y = _dt/_eps_y[ind_ijk].real;
+                    double b_y = _dt/_eps_y[ind_ijk].real;
 
                     src_t = src_func_t(t, Jy[ind_src].imag);
                     _Ey[ind_ijk] = _Ey[ind_ijk] - src_t * Jy[ind_src].real * b_y;
@@ -581,7 +597,7 @@ void fdtd::FDTD::update_E(double t)
                     ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
                     ind_src = i*Js*Ks + j*Ks + k;
 
-                    b_z = _dt/_eps_z[ind_ijk].real;
+                    double b_z = _dt/_eps_z[ind_ijk].real;
 
                     src_t = src_func_t(t, Jz[ind_src].imag);
                     _Ez[ind_ijk] = _Ez[ind_ijk] - src_t * Jz[ind_src].real * b_z;
@@ -589,6 +605,25 @@ void fdtd::FDTD::update_E(double t)
             }
         }
     }
+}
+
+void fdtd::FDTD::update_E(double t)
+{
+	update_E_fields <<<1,1>>>
+		(t, _R, _Nx, _Ny, _Nz, _dx, _dy, _dz, _dt,
+		 _bc[0], _bc[1], _bc[2],
+		 _w_pml_x0, _w_pml_x1, _w_pml_y0, _w_pml_y1, _w_pml_z0, _w_pml_z1,
+		 _Ex, _Ey, _Ez, _Hx, _Hy, _Hz,
+		 _eps_x, _eps_y, _eps_z,
+		 _pml_Hxy0, _pml_Hxy1, _pml_Hxz0, _pml_Hxz1,
+		 _pml_Hyx0, _pml_Hyx1, _pml_Hyz0, _pml_Hyz1,
+		 _pml_Hzx0, _pml_Hzx1, _pml_Hzy0, _pml_Hzy1,
+		 _kappa_E_x, _kappa_E_y, _kappa_E_z,
+		 _bEx, _bEy, _bEz,
+		 _cEx, _cEy, _cEz);
+	cudaDeviceSynchronize();
+
+	update_E_sources(t);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -656,15 +691,15 @@ void fdtd::FDTD::build_pml()
     if(0 < ymin) {
         N = _Nz * _Nx * ymin;
 
-        delete [] _pml_Exy0; _pml_Exy0 = NULL;
-        delete [] _pml_Ezy0; _pml_Ezy0 = NULL;
-        _pml_Exy0 = new double[N];
-        _pml_Ezy0 = new double[N];
+        cudaFree(_pml_Exy0);
+		cudaFree(_pml_Ezy0);
+        cudaMallocManaged((void **)&_pml_Exy0, N*sizeof(double));
+        cudaMallocManaged((void **)&_pml_Ezy0, N*sizeof(double));
 
-        delete [] _pml_Hxy0; _pml_Hxy0 = NULL;
-        delete [] _pml_Hzy0; _pml_Hzy0 = NULL;
-        _pml_Hxy0 = new double[N];
-        _pml_Hzy0 = new double[N];
+        cudaFree(_pml_Hxy0);
+        cudaFree(_pml_Hzy0);
+        cudaMallocManaged((void **)&_pml_Hxy0, N*sizeof(double));
+        cudaMallocManaged((void **)&_pml_Hzy0, N*sizeof(double));
     }
 
     // touches ymax boundary
@@ -812,6 +847,8 @@ void fdtd::FDTD::compute_pml_params()
     cudaFree(_cEx); cudaMallocManaged((void **)&_cEx, sizeof(double)*(_w_pml_x0 + _w_pml_x1));
     cudaFree(_cEy); cudaMallocManaged((void **)&_cEy, sizeof(double)*(_w_pml_y0 + _w_pml_y1));
     cudaFree(_cEz); cudaMallocManaged((void **)&_cEz, sizeof(double)*(_w_pml_z0 + _w_pml_z1));
+
+	std::cout << "after malloc, _cEz: " << _cEz << std::endl;	
 
     // calculate the PML parameters. These parameters are all functions of
     // the distance from the ONSET of the PML edge (which begins in the simulation
