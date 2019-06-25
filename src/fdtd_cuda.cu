@@ -123,234 +123,270 @@ void fdtd::FDTD::set_complex_eps(bool complex_eps)
     _complex_eps = complex_eps;
 }
 
-void fdtd::FDTD::update_H(double t)
+__device__
+double cuda_src_func_t(double t, double phase, double src_T, double src_min, double src_k)
 {
-    double odx = _R/_dx,
-           ody = _R/_dy,
-           odz = _R/_dz,
+    if(t <= src_T)
+        return sin(t + phase)*((1+src_min) * exp(-(t-src_T)*(t-src_T) / src_k) - src_min);
+    else
+        return sin(t + phase);
+}
+
+__global__
+void update_H_fields(double t, double R,
+					 int Nx, int Ny, int Nz,
+					 double dx, double dy, double dz, double dt,
+					 char bc0, char bc1, char bc2,
+					 int w_pml_x0, int w_pml_x1,
+					 int w_pml_y0, int w_pml_y1,
+					 int w_pml_z0, int w_pml_z1,
+					 double *Ex, double *Ey, double *Ez,
+					 double *Hx, double *Hy, double *Hz,
+					 complex128 *mu_x, complex128 *mu_y, complex128 *mu_z,
+					 double *pml_Exy0, double *pml_Exy1, double *pml_Exz0, double *pml_Exz1,
+					 double *pml_Eyx0, double *pml_Eyx1, double *pml_Eyz0, double *pml_Eyz1,
+					 double *pml_Ezx0, double *pml_Ezx1, double *pml_Ezy0, double *pml_Ezy1,
+					 double *kappa_H_x, double *kappa_H_y, double *kappa_H_z,
+					 double *bHx, double *bHy, double *bHz,
+					 double *cHx, double *cHy, double *cHz
+	)
+{
+    double odx = R/dx,
+           ody = R/dy,
+           odz = R/dz,
            b, C, kappa,
-           src_t,
            dt_by_mux, dt_by_muy, dt_by_muz;
 
-    int pml_xmin = _w_pml_x0, pml_xmax = _Nx-_w_pml_x1,
-        pml_ymin = _w_pml_y0, pml_ymax = _Ny-_w_pml_y1,
-        pml_zmin = _w_pml_z0, pml_zmax = _Nz-_w_pml_z1;
+    int pml_xmin = w_pml_x0, pml_xmax = Nx-w_pml_x1,
+        pml_ymin = w_pml_y0, pml_ymax = Ny-w_pml_y1,
+        pml_zmin = w_pml_z0, pml_zmax = Nz-w_pml_z1;
 
     int ind_ijk, ind_ip1jk, ind_ijp1k, ind_ijkp1,
-        ind_pml, ind_src, i0s, j0s, k0s, Is, Js, Ks,
+        ind_pml, 
         ind_pml_param;
 
     double dExdy, dExdz, dEydx, dEydz, dEzdx, dEzdy;
-    complex128 *Mx, *My, *Mz;
 
-    for(int i = 0; i < _Nz; i++) {
-        int kill_zwrap = (_bc[2] != 'P' && i == _Nz-1) ? 1 : 0;
-		int ip1 = i==_Nz-1 ? 0 : i+1;
-        for(int j = 0; j < _Ny; j++) {
-			int kill_ywrap = (_bc[1] != 'P' && j == _Ny-1) ? 1 : 0;
-			int jp1 = j==_Ny-1 ? 0 : j+1;
-			for(int k = 0; k < _Nx; k++) {
-				int kill_xwrap = (_bc[0] != 'P' && k == _Nx-1) ? 1 : 0;
-				int kp1 = k==_Nx-1 ? 0 : k+1;
+	int i = blockIdx.z * blockDim.z + threadIdx.z;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+	int k = blockIdx.x * blockDim.x + threadIdx.x;
+	if ((i < Nz) && (j < Ny) && (k < Nx)) {
 
-                ind_ijk =   (i+0)*_Ny*_Nx + (j+0)*_Nx + (k+0);
-                ind_ijp1k = (i+0)*_Ny*_Nx + (jp1)*_Nx + (k+0);
-                ind_ip1jk = (ip1)*_Ny*_Nx + (j+0)*_Nx + (k+0);
-                ind_ijkp1 = (i+0)*_Ny*_Nx + (j+0)*_Nx + (kp1);
+        int kill_zwrap = (bc2 != 'P' && i == Nz-1) ? 1 : 0;
+		int ip1 = i==Nz-1 ? 0 : i+1;
 
-				assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-				assert(ind_ip1jk >= 0 && ind_ip1jk < _Nz*_Ny*_Nx);
-				assert(ind_ijp1k >= 0 && ind_ijp1k < _Nz*_Ny*_Nx);
-				assert(ind_ijkp1 >= 0 && ind_ijkp1 < _Nz*_Ny*_Nx);
+		int kill_ywrap = (bc1 != 'P' && j == Ny-1) ? 1 : 0;
+		int jp1 = j==Ny-1 ? 0 : j+1;
 
-                // compute prefactors
-                dt_by_mux = _dt/_mu_x[ind_ijk].real;
-                dt_by_muy = _dt/_mu_y[ind_ijk].real;
-                dt_by_muz = _dt/_mu_z[ind_ijk].real;
+		int kill_xwrap = (bc0 != 'P' && k == Nx-1) ? 1 : 0;
+		int kp1 = k==Nx-1 ? 0 : k+1;
 
-                // Update Hx
-                dEzdy = ody * ((kill_ywrap ? 0 : _Ez[ind_ijp1k])  - _Ez[ind_ijk]);
-                dEydz = odz * ((kill_zwrap ? 0 : _Ey[ind_ip1jk])  - _Ey[ind_ijk]);
+		ind_ijk =   (i+0)*Ny*Nx + (j+0)*Nx + (k+0);
+		ind_ijp1k = (i+0)*Ny*Nx + (jp1)*Nx + (k+0);
+		ind_ip1jk = (ip1)*Ny*Nx + (j+0)*Nx + (k+0);
+		ind_ijkp1 = (i+0)*Ny*Nx + (j+0)*Nx + (kp1);
 
-                _Hx[ind_ijk] = _Hx[ind_ijk] +  dt_by_mux *
-                               (dEydz - dEzdy);
+		// compute prefactors
+		dt_by_mux = dt/mu_x[ind_ijk].real;
+		dt_by_muy = dt/mu_y[ind_ijk].real;
+		dt_by_muz = dt/mu_z[ind_ijk].real;
 
-                // update Hy
-                dExdz = odz * ((kill_zwrap ? 0 : _Ex[ind_ip1jk]) - _Ex[ind_ijk]);
-                dEzdx = odx * ((kill_xwrap ? 0 : _Ez[ind_ijkp1]) - _Ez[ind_ijk]);
+		// Update Hx
+		dEzdy = ody * ((kill_ywrap ? 0 : Ez[ind_ijp1k])  - Ez[ind_ijk]);
+		dEydz = odz * ((kill_zwrap ? 0 : Ey[ind_ip1jk])  - Ey[ind_ijk]);
+		Hx[ind_ijk] += dt_by_mux * (dEydz - dEzdy);
 
-                _Hy[ind_ijk] = _Hy[ind_ijk] + dt_by_muy *
-                               (dEzdx - dExdz);
+		// update Hy
+		dExdz = odz * ((kill_zwrap ? 0 : Ex[ind_ip1jk]) - Ex[ind_ijk]);
+		dEzdx = odx * ((kill_xwrap ? 0 : Ez[ind_ijkp1]) - Ez[ind_ijk]);
+		Hy[ind_ijk] += dt_by_muy * (dEzdx - dExdz);
 
-                // update Hz
-                dEydx = odx * ((kill_xwrap ? 0 : _Ey[ind_ijkp1]) - _Ey[ind_ijk]);
-                dExdy = ody * ((kill_ywrap ? 0 : _Ex[ind_ijp1k]) - _Ex[ind_ijk]);
+		// update Hz
+		dEydx = odx * ((kill_xwrap ? 0 : Ey[ind_ijkp1]) - Ey[ind_ijk]);
+		dExdy = ody * ((kill_ywrap ? 0 : Ex[ind_ijp1k]) - Ex[ind_ijk]);
+		Hz[ind_ijk] += dt_by_muz * (dExdy - dEydx);
 
-                _Hz[ind_ijk] = _Hz[ind_ijk] + dt_by_muz *
-                               (dExdy - dEydx);
+		// Do PML updates
+		if(k < pml_xmin) {
+			// get index in PML array
+			ind_pml = i*Ny*(pml_xmin) +j*(pml_xmin) + k;
 
-                // Do PML updates
-                if(k < pml_xmin) {
-                    // get index in PML array
-                    ind_pml = i*_Ny*(pml_xmin) +j*(pml_xmin) + k;
+			// get PML coefficients
+			ind_pml_param = pml_xmin - k - 1;
+			kappa = kappa_H_x[ind_pml_param];
+			b = bHx[ind_pml_param];
+			C = cHx[ind_pml_param];
 
-                    // get PML coefficients
-                    ind_pml_param = pml_xmin - k - 1;
-                    kappa = _kappa_H_x[ind_pml_param];
-                    b = _bHx[ind_pml_param];
-                    C = _cHx[ind_pml_param];
+			// Update PML convolution
+			pml_Eyx0[ind_pml] = C * dEydx + b*pml_Eyx0[ind_pml];
+			pml_Ezx0[ind_pml] = C * dEzdx + b*pml_Ezx0[ind_pml];
 
-                    // Update PML convolution
-                    _pml_Eyx0[ind_pml] = C * dEydx + b*_pml_Eyx0[ind_pml];
-                    _pml_Ezx0[ind_pml] = C * dEzdx + b*_pml_Ezx0[ind_pml];
+			Hz[ind_ijk] -= dt_by_muz * (pml_Eyx0[ind_pml]-dEydx+dEydx/kappa);
+			Hy[ind_ijk] += dt_by_muy * (pml_Ezx0[ind_pml]-dEzdx+dEzdx/kappa);
 
-                    _Hz[ind_ijk] = _Hz[ind_ijk] - dt_by_muz * (_pml_Eyx0[ind_pml]-dEydx+dEydx/kappa);
-                    _Hy[ind_ijk] = _Hy[ind_ijk] + dt_by_muy * (_pml_Ezx0[ind_pml]-dEzdx+dEzdx/kappa);
+		}
+		else if(k  >= pml_xmax) {
+			ind_pml = i*Ny*(Nx - pml_xmax) + j*(Nx - pml_xmax) + k - pml_xmax;
 
-                }
-                else if(k  >= pml_xmax) {
-                    ind_pml = i*_Ny*(_Nx - pml_xmax) + j*(_Nx - pml_xmax) + k - pml_xmax;
+			// get pml coefficients
+			ind_pml_param = k - pml_xmax + w_pml_x0;
+			kappa = kappa_H_x[ind_pml_param];
+			b = bHx[ind_pml_param];
+			C = cHx[ind_pml_param];
 
-                    // get pml coefficients
-                    ind_pml_param = k - pml_xmax + _w_pml_x0;
-                    kappa = _kappa_H_x[ind_pml_param];
-                    b = _bHx[ind_pml_param];
-                    C = _cHx[ind_pml_param];
+			pml_Eyx1[ind_pml] = C * dEydx + b*pml_Eyx1[ind_pml];
+			pml_Ezx1[ind_pml] = C * dEzdx + b*pml_Ezx1[ind_pml];
 
-                    _pml_Eyx1[ind_pml] = C * dEydx + b*_pml_Eyx1[ind_pml];
-                    _pml_Ezx1[ind_pml] = C * dEzdx + b*_pml_Ezx1[ind_pml];
+			Hz[ind_ijk] -= dt_by_muz * (pml_Eyx1[ind_pml]-dEydx+dEydx/kappa);
+			Hy[ind_ijk] += dt_by_muy * (pml_Ezx1[ind_pml]-dEzdx+dEzdx/kappa);
+		}
 
-                    _Hz[ind_ijk] = _Hz[ind_ijk] - dt_by_muz * (_pml_Eyx1[ind_pml]-dEydx+dEydx/kappa);
-                    _Hy[ind_ijk] = _Hy[ind_ijk] + dt_by_muy * (_pml_Ezx1[ind_pml]-dEzdx+dEzdx/kappa);
-                }
+		if(j < pml_ymin) {
+			ind_pml = i*pml_ymin*Nx +j*Nx + k;
 
-                if(j < pml_ymin) {
-                    ind_pml = i*pml_ymin*_Nx +j*_Nx + k;
+			// compute coefficients
+			ind_pml_param = pml_ymin - j - 1;
+			kappa = kappa_H_y[ind_pml_param];
+			b = bHy[ind_pml_param];
+			C = cHy[ind_pml_param];
 
-                    // compute coefficients
-                    ind_pml_param = pml_ymin - j - 1;
-                    kappa = _kappa_H_y[ind_pml_param];
-                    b = _bHy[ind_pml_param];
-                    C = _cHy[ind_pml_param];
+			pml_Exy0[ind_pml] = C * dExdy + b*pml_Exy0[ind_pml];
+			pml_Ezy0[ind_pml] = C * dEzdy + b*pml_Ezy0[ind_pml];
 
-                    _pml_Exy0[ind_pml] = C * dExdy + b*_pml_Exy0[ind_pml];
-                    _pml_Ezy0[ind_pml] = C * dEzdy + b*_pml_Ezy0[ind_pml];
+			Hz[ind_ijk] += dt_by_muz * (pml_Exy0[ind_pml]-dExdy+dExdy/kappa);
+			Hx[ind_ijk] -= dt_by_mux * (pml_Ezy0[ind_pml]-dEzdy+dEzdy/kappa);
+		}
+		else if(j >= pml_ymax) {
+			ind_pml = i*(Ny - pml_ymax)*Nx +(j - pml_ymax)*Nx + k;
 
-                    _Hz[ind_ijk] = _Hz[ind_ijk] + dt_by_muz * (_pml_Exy0[ind_pml]-dExdy+dExdy/kappa);
-                    _Hx[ind_ijk] = _Hx[ind_ijk] - dt_by_mux * (_pml_Ezy0[ind_pml]-dEzdy+dEzdy/kappa);
-                }
-                else if(j >= pml_ymax) {
-                    ind_pml = i*(_Ny - pml_ymax)*_Nx +(j - pml_ymax)*_Nx + k;
+			// compute coefficients
+			ind_pml_param = j - pml_ymax + w_pml_y0;
+			kappa = kappa_H_y[ind_pml_param];
+			b = bHy[ind_pml_param];
+			C = cHy[ind_pml_param];
 
-                    // compute coefficients
-                    ind_pml_param = j - pml_ymax + _w_pml_y0;
-                    kappa = _kappa_H_y[ind_pml_param];
-                    b = _bHy[ind_pml_param];
-                    C = _cHy[ind_pml_param];
+			pml_Exy1[ind_pml] = C * dExdy + b*pml_Exy1[ind_pml];
+			pml_Ezy1[ind_pml] = C * dEzdy + b*pml_Ezy1[ind_pml];
 
-                    _pml_Exy1[ind_pml] = C * dExdy + b*_pml_Exy1[ind_pml];
-                    _pml_Ezy1[ind_pml] = C * dEzdy + b*_pml_Ezy1[ind_pml];
+			Hz[ind_ijk] += dt_by_muz * (pml_Exy1[ind_pml]-dExdy+dExdy/kappa);
+			Hx[ind_ijk] -= dt_by_mux * (pml_Ezy1[ind_pml]-dEzdy+dEzdy/kappa);
+		}
 
-                    _Hz[ind_ijk] = _Hz[ind_ijk] + dt_by_muz * (_pml_Exy1[ind_pml]-dExdy+dExdy/kappa);
-                    _Hx[ind_ijk] = _Hx[ind_ijk] - dt_by_mux * (_pml_Ezy1[ind_pml]-dEzdy+dEzdy/kappa);
-                }
+		if(i < pml_zmin) {
+			ind_pml = i*Ny*Nx +j*Nx + k;
 
-                if(i < pml_zmin) {
-                    ind_pml = i*_Ny*_Nx +j*_Nx + k;
+			// get coefficients
+			ind_pml_param = pml_zmin - i - 1;
+			kappa = kappa_H_z[ind_pml_param];
+			b = bHz[ind_pml_param];
+			C = cHz[ind_pml_param];
 
-                    // get coefficients
-                    ind_pml_param = pml_zmin - i - 1;
-                    kappa = _kappa_H_z[ind_pml_param];
-                    b = _bHz[ind_pml_param];
-                    C = _cHz[ind_pml_param];
+			pml_Exz0[ind_pml] = C * dExdz + b*pml_Exz0[ind_pml];
+			pml_Eyz0[ind_pml] = C * dEydz + b*pml_Eyz0[ind_pml];
 
-                    _pml_Exz0[ind_pml] = C * dExdz + b*_pml_Exz0[ind_pml];
-                    _pml_Eyz0[ind_pml] = C * dEydz + b*_pml_Eyz0[ind_pml];
+			Hx[ind_ijk] += dt_by_mux * (pml_Eyz0[ind_pml]-dEydz+dEydz/kappa);
+			Hy[ind_ijk] -= dt_by_muy * (pml_Exz0[ind_pml]-dExdz+dExdz/kappa);
+		}
+		else if(i > pml_zmax) {
+			ind_pml = (i - pml_zmax)*Ny*Nx +j*Nx + k;
 
-                    _Hx[ind_ijk] = _Hx[ind_ijk] + dt_by_mux * (_pml_Eyz0[ind_pml]-dEydz+dEydz/kappa);
-                    _Hy[ind_ijk] = _Hy[ind_ijk] - dt_by_muy * (_pml_Exz0[ind_pml]-dExdz+dExdz/kappa);
-                }
-                else if(i > pml_zmax) {
-                    ind_pml = (i - pml_zmax)*_Ny*_Nx +j*_Nx + k;
+			// get coefficients
+			ind_pml_param = i - pml_zmax + w_pml_z0;
+			kappa = kappa_H_z[ind_pml_param];
+			b = bHz[ind_pml_param];
+			C = cHz[ind_pml_param];
 
-                    // get coefficients
-                    ind_pml_param = i - pml_zmax + _w_pml_z0;
-                    kappa = _kappa_H_z[ind_pml_param];
-                    b = _bHz[ind_pml_param];
-                    C = _cHz[ind_pml_param];
+			pml_Exz1[ind_pml] = C * dExdz + b*pml_Exz1[ind_pml];
+			pml_Eyz1[ind_pml] = C * dEydz + b*pml_Eyz1[ind_pml];
 
-                    _pml_Exz1[ind_pml] = C * dExdz + b*_pml_Exz1[ind_pml];
-                    _pml_Eyz1[ind_pml] = C * dEydz + b*_pml_Eyz1[ind_pml];
+			Hx[ind_ijk] += dt_by_mux * (pml_Eyz1[ind_pml]-dEydz+dEydz/kappa);
+			Hy[ind_ijk] -= dt_by_muy * (pml_Exz1[ind_pml]-dExdz+dExdz/kappa);
+		}
 
-                    _Hx[ind_ijk] = _Hx[ind_ijk] + dt_by_mux * (_pml_Eyz1[ind_pml]-dEydz+dEydz/kappa);
-                    _Hy[ind_ijk] = _Hy[ind_ijk] - dt_by_muy * (_pml_Exz1[ind_pml]-dExdz+dExdz/kappa);
-                }
+	}
+}
 
-            }
-        }
+__global__
+void update_H_sources(double t,
+					  int Nx, int Ny, int Nz,
+					  double dt,
+					  double *Hx, double *Hy, double *Hz,
+					  complex128 *mu_x, complex128 *mu_y, complex128 *mu_z,
+					  double src_T, double src_min, double src_k,
+					  int i0s, int j0s, int k0s,
+					  int Is, int Js, int Ks,
+					  complex128 *Mx, complex128 *My, complex128 *Mz)
+{
+    int ind_ijk, ind_src;
+    double src_t;
+
+	int i = blockIdx.z * blockDim.z + threadIdx.z;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+	int k = blockIdx.x * blockDim.x + threadIdx.x;
+	if ((i < Is) && (j < Js) && (k < Ks)) {
+		ind_ijk = (i+i0s)*Ny*Nx + (j+j0s)*Nx + (k+k0s);
+		ind_src = i*Js*Ks + j*Ks + k;
+
+        // update Mx
+		src_t = cuda_src_func_t(t, Mx[ind_src].imag,
+								src_T, src_min, src_k);
+		Hx[ind_ijk] += src_t * Mx[ind_src].real * dt / mu_x[ind_ijk].real;
+
+        // update My
+		src_t = cuda_src_func_t(t, My[ind_src].imag,
+								src_T, src_min, src_k);
+		Hy[ind_ijk] += src_t * My[ind_src].real * dt / mu_y[ind_ijk].real;
+
+        // update Mz
+		src_t = cuda_src_func_t(t, Mz[ind_src].imag,
+								src_T, src_min, src_k);
+		Hz[ind_ijk] += src_t * Mz[ind_src].real * dt / mu_z[ind_ijk].real;
     }
+}
+
+void fdtd::FDTD::update_H(double t)
+{
+	dim3 fields_threadsPerBlock(8, 8, 8);
+	dim3 fields_numBlocks(ceil((float)_Nx/fields_threadsPerBlock.x),
+						  ceil((float)_Ny/fields_threadsPerBlock.y),
+						  ceil((float)_Nz/fields_threadsPerBlock.z));
+
+	update_H_fields <<<fields_numBlocks, fields_threadsPerBlock>>>
+		(t, _R,
+		 _Nx, _Ny, _Nz,
+		 _dx, _dy, _dz, _dt,
+		 _bc[0], _bc[1], _bc[2],
+		 _w_pml_x0, _w_pml_x1,
+		 _w_pml_y0, _w_pml_y1,
+		 _w_pml_z0, _w_pml_z1,
+		 _Ex, _Ey, _Ez,
+		 _Hx, _Hy, _Hz,
+		 _mu_x, _mu_y, _mu_z,
+		 _pml_Exy0, _pml_Exy1, _pml_Exz0, _pml_Exz1,
+		 _pml_Eyx0, _pml_Eyx1, _pml_Eyz0, _pml_Eyz1,
+		 _pml_Ezx0, _pml_Ezx1, _pml_Ezy0, _pml_Ezy1,
+		 _kappa_H_x, _kappa_H_y, _kappa_H_z,
+		 _bHx, _bHy, _bHz,
+		 _cHx, _cHy, _cHz);
 
     // Update sources
     for(auto const& src : _sources) {
-        i0s = src.i0; Is = src.I;
-        j0s = src.j0; Js = src.J;
-        k0s = src.k0; Ks = src.K;
+		dim3 sources_threadsPerBlock(8, 8, 8);
+		dim3 sources_numBlocks(ceil((float) src.K/sources_threadsPerBlock.x),
+							   ceil((float) src.J/sources_threadsPerBlock.y),
+							   ceil((float) src.I/sources_threadsPerBlock.z));
 
-        // update Mx
-        Mx = src.Mx;
-
-        for(int i = 0; i < Is; i++) {
-            for(int j = 0; j < Js; j++) {
-                for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
-                    ind_src = i*Js*Ks + j*Ks + k;
-
-					assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-					assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
-
-                    src_t = src_func_t(t, Mx[ind_src].imag);
-                    _Hx[ind_ijk] = _Hx[ind_ijk] + src_t * Mx[ind_src].real * _dt / _mu_x[ind_ijk].real;
-                }
-            }
-        }
-
-        // update My
-        My = src.My;
-
-        for(int i = 0; i < Is; i++) {
-            for(int j = 0; j < Js; j++) {
-                for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
-                    ind_src = i*Js*Ks + j*Ks + k;
-
-					assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-					assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
-
-                    src_t = src_func_t(t, My[ind_src].imag);
-                    _Hy[ind_ijk] = _Hy[ind_ijk] + src_t * My[ind_src].real * _dt / _mu_y[ind_ijk].real;
-                }
-            }
-        }
-
-        // update Mz
-        Mz = src.Mz;
-
-        for(int i = 0; i < Is; i++) {
-            for(int j = 0; j < Js; j++) {
-                for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
-                    ind_src = i*Js*Ks + j*Ks + k;
-
-					assert(ind_ijk >= 0 && ind_ijk < _Nz*_Ny*_Nx);
-					assert(ind_src >= 0 && ind_src < _Nz*_Ny*_Nx);
-
-                    src_t = src_func_t(t, Mz[ind_src].imag);
-                    _Hz[ind_ijk] = _Hz[ind_ijk] + src_t * Mz[ind_src].real * _dt / _mu_z[ind_ijk].real;
-                }
-            }
-        }
-
-    }
+		update_H_sources <<<sources_numBlocks, sources_threadsPerBlock>>>
+			(t,
+			 _Nx, _Ny, _Nz,
+			 _dt,
+			 _Hx, _Hy, _Hz,
+			 _mu_x, _mu_y, _mu_z,
+			 _src_T, _src_min, _src_k,
+			 src.i0, src.j0, src.k0,
+			 src.I, src.J, src.K,
+			 src.Mx, src.My, src.Mz);
+	}
 }
 
 enum action { ACTION_NOP, ACTION_ZERO, ACTION_FLIP, ACTION_COPY };
@@ -537,15 +573,6 @@ void update_E_fields(double t, double R,
 			Ey[ind_ijk] = Ey[ind_ijk] + (pml_Hxz1[ind_pml]-dHxdz+dHxdz/kappa) * b_y;
 		}
 	}
-}
-
-__device__
-double cuda_src_func_t(double t, double phase, double src_T, double src_min, double src_k)
-{
-    if(t <= src_T)
-        return sin(t + phase)*((1+src_min) * exp(-(t-src_T)*(t-src_T) / src_k) - src_min);
-    else
-        return sin(t + phase);
 }
 
 __global__
