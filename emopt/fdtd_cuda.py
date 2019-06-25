@@ -298,11 +298,11 @@ class FDTD(MaxwellSolver):
         self._libfdtd = libFDTD.FDTD_new(Nx, Ny, Nz)
         # field arrays
         self._Ex = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
-        self._Ey = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
-        self._Ez = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
-        self._Hx = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
-        self._Hy = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
-        self._Hz = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
+        self._Ey = np.ctypeslib.as_array(self._libfdtd.contents._Ey, shape=(Nz*Ny*Nx,))
+        self._Ez = np.ctypeslib.as_array(self._libfdtd.contents._Ez, shape=(Nz*Ny*Nx,))
+        self._Hx = np.ctypeslib.as_array(self._libfdtd.contents._Hx, shape=(Nz*Ny*Nx,))
+        self._Hy = np.ctypeslib.as_array(self._libfdtd.contents._Hy, shape=(Nz*Ny*Nx,))
+        self._Hz = np.ctypeslib.as_array(self._libfdtd.contents._Hz, shape=(Nz*Ny*Nx,))
         # material arrays 
         self._eps_x = np.ctypeslib.as_array(self._libfdtd.contents._eps_x, shape=(Nz*Ny*Nx,))
         self._eps_y = np.ctypeslib.as_array(self._libfdtd.contents._eps_y, shape=(Nz*Ny*Nx,))
@@ -963,7 +963,47 @@ class FDTD(MaxwellSolver):
                 break
 
             libFDTD.FDTD_update_H(self._libfdtd, n*dt)
+ 
+            if False:
+                print(f'_N=({self._Nz, self._Ny, self._Nx})')
+                fig,ax=plt.subplots(self._Nz,6)
+                fig.canvas.set_window_title('cuda after H update')
+                plotHx = np.reshape(self._Hx, [self._Nz, self._Ny, self._Nx])
+                plotHy = np.reshape(self._Hy, [self._Nz, self._Ny, self._Nx])
+                plotHz = np.reshape(self._Hz, [self._Nz, self._Ny, self._Nx])
+                plotEx = np.reshape(self._Ex, [self._Nz, self._Ny, self._Nx])
+                plotEy = np.reshape(self._Ey, [self._Nz, self._Ny, self._Nx])
+                plotEz = np.reshape(self._Ez, [self._Nz, self._Ny, self._Nx])
+                for plot_iz in range(self._Nz):
+                    ax[plot_iz,0].matshow(plotHx[plot_iz,...])
+                    ax[plot_iz,1].matshow(plotHy[plot_iz,...])
+                    ax[plot_iz,2].matshow(plotHz[plot_iz,...])
+                    ax[plot_iz,3].matshow(plotEx[plot_iz,...])
+                    ax[plot_iz,4].matshow(plotEy[plot_iz,...])
+                    ax[plot_iz,5].matshow(plotEz[plot_iz,...])
+                #print(f'in python:  _Ey[62] = {self._Ey[62]}')
+
             libFDTD.FDTD_update_E(self._libfdtd, (n+0.5)*dt)
+
+            if False:
+                print(f'_N=({self._Nz, self._Ny, self._Nx})')
+                fig,ax=plt.subplots(self._Nz,6)
+                fig.canvas.set_window_title('cuda after E update')
+                plotHx = np.reshape(self._Hx, [self._Nz, self._Ny, self._Nx])
+                plotHy = np.reshape(self._Hy, [self._Nz, self._Ny, self._Nx])
+                plotHz = np.reshape(self._Hz, [self._Nz, self._Ny, self._Nx])
+                plotEx = np.reshape(self._Ex, [self._Nz, self._Ny, self._Nx])
+                plotEy = np.reshape(self._Ey, [self._Nz, self._Ny, self._Nx])
+                plotEz = np.reshape(self._Ez, [self._Nz, self._Ny, self._Nx])
+                for plot_iz in range(self._Nz):
+                    ax[plot_iz,0].matshow(plotHx[plot_iz,...])
+                    ax[plot_iz,1].matshow(plotHy[plot_iz,...])
+                    ax[plot_iz,2].matshow(plotHz[plot_iz,...])
+                    ax[plot_iz,3].matshow(plotEx[plot_iz,...])
+                    ax[plot_iz,4].matshow(plotEy[plot_iz,...])
+                    ax[plot_iz,5].matshow(plotEz[plot_iz,...])
+
+                plt.show()
 
             if(p == Tn-1):
                 # Update times of field snapshots

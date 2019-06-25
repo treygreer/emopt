@@ -1204,7 +1204,6 @@ class FDTD(MaxwellSolver):
             self._gc.update_local_vector(self._Ey)
             self._gc.update_local_vector(self._Ez)
 
-
         libFDTD.FDTD_capture_t1_fields(self._libfdtd)
 
         for n in range(Tn):

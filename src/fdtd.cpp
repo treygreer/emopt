@@ -722,6 +722,7 @@ void fdtd::FDTD::update_E(int n, double t)
 #endif
                     src_t = src_func_t(n, t, Jy[ind_src].imag);
                     _Ey[ind_ijk] = _Ey[ind_ijk] - src_t * Jy[ind_src].real * b_y;                   
+					//std::cout << "_Ey[" << ind_ijk << "] =" << _Ey[ind_ijk] << std::endl;
                 }
             }
         }
