@@ -539,83 +539,66 @@ void update_E_fields(double t, double R,
 	}
 }
 
-void fdtd::FDTD::update_E_sources(double t)
+__device__
+double cuda_src_func_t(double t, double phase, double src_T, double src_min, double src_k)
 {
-    int ind_ijk, 
-        ind_src, i0s, j0s, k0s, Is, Js, Ks;
+    if(t <= src_T)
+        return sin(t + phase)*((1+src_min) * exp(-(t-src_T)*(t-src_T) / src_k) - src_min);
+    else
+        return sin(t + phase);
+}
 
-    complex128 *Jx, *Jy, *Jz;
+__global__
+void update_E_sources(double t,
+					  int Nx, int Ny, int Nz,
+					  double dt,
+					  double *Ex, double *Ey, double *Ez,
+					  complex128 *eps_x, complex128 *eps_y, complex128 *eps_z,
+					  double src_T, double src_min, double src_k,
+					  int i0s, int j0s, int k0s,
+					  int Is, int Js, int Ks,
+					  complex128 *Jx, complex128 *Jy, complex128 *Jz)
+{
+    int ind_ijk, ind_src;
     double src_t;
+	double b;
 
-    // Update sources
-    for(auto const& src : _sources) {
-        i0s = src.i0; Is = src.I;
-        j0s = src.j0; Js = src.J;
-        k0s = src.k0; Ks = src.K;
+	int i = blockIdx.z * blockDim.z + threadIdx.z;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+	int k = blockIdx.x * blockDim.x + threadIdx.x;
+	if ((i < Is) && (j < Js) && (k < Ks)) {
 
-        // update Jx
-        Jx = src.Jx;
+		ind_ijk = (i+i0s)*Ny*Nx + (j+j0s)*Nx + (k+k0s);
+		ind_src = i*Js*Ks + j*Ks + k;
 
-        for(int i = 0; i < Is; i++) {
-            for(int j = 0; j < Js; j++) {
-                for(int k = 0; k < Ks; k++) {
-                    ind_ijk    = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
-                    ind_src = i*Js*Ks + j*Ks + k;
+		// update Jx
+		b = dt/eps_x[ind_ijk].real;
+		src_t = cuda_src_func_t(t, Jx[ind_src].imag,
+								src_T, src_min, src_k);
+		Ex[ind_ijk] -= src_t * Jx[ind_src].real * b;
 
-                    double b_x = _dt/_eps_x[ind_ijk].real;
+		// update Jy
+		b = dt/eps_y[ind_ijk].real;
+		src_t = cuda_src_func_t(t, Jy[ind_src].imag,
+								src_T, src_min, src_k);
+		Ey[ind_ijk] -= src_t * Jy[ind_src].real * b;
 
-                    src_t = src_func_t(t, Jx[ind_src].imag);
-                    _Ex[ind_ijk] = _Ex[ind_ijk] - src_t * Jx[ind_src].real * b_x;
-                }
-            }
-        }
-
-        // update Jy
-        Jy = src.Jy;
-
-        for(int i = 0; i < Is; i++) {
-            for(int j = 0; j < Js; j++) {
-                for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
-                    ind_src = i*Js*Ks + j*Ks + k;
-
-                    double b_y = _dt/_eps_y[ind_ijk].real;
-
-                    src_t = src_func_t(t, Jy[ind_src].imag);
-                    _Ey[ind_ijk] = _Ey[ind_ijk] - src_t * Jy[ind_src].real * b_y;
-					//std::cout << "_Ey[" << ind_ijk << "] =" << _Ey[ind_ijk] << std::endl;
-                }
-            }
-        }
-
-        // update Jz
-        Jz = src.Jz;
-
-        for(int i = 0; i < Is; i++) {
-            for(int j = 0; j < Js; j++) {
-                for(int k = 0; k < Ks; k++) {
-                    ind_ijk = (i+i0s)*_Ny*_Nx + (j+j0s)*_Nx + (k+k0s);
-                    ind_src = i*Js*Ks + j*Ks + k;
-
-                    double b_z = _dt/_eps_z[ind_ijk].real;
-
-                    src_t = src_func_t(t, Jz[ind_src].imag);
-                    _Ez[ind_ijk] = _Ez[ind_ijk] - src_t * Jz[ind_src].real * b_z;
-                }
-            }
-        }
-    }
+		// update Jz
+		b = dt/eps_z[ind_ijk].real;
+		src_t = cuda_src_func_t(t, Jz[ind_src].imag,
+								src_T, src_min, src_k);
+		Ez[ind_ijk] -= src_t * Jz[ind_src].real * b;
+	}
 }
 
 void fdtd::FDTD::update_E(double t)
 {
-	dim3 threadsPerBlock(1, 1, 1);
-	dim3 numBlocks(ceil((float)_Nx/threadsPerBlock.x),
-				   ceil((float)_Ny/threadsPerBlock.y),
-				   ceil((float)_Nz/threadsPerBlock.z));
-	//std::cout << "numBlocks=" << numBlocks.x <<','<< numBlocks.y <<','<< numBlocks.z << std::endl;	
+	dim3 fields_threadsPerBlock(8, 8, 8);
+	dim3 fields_numBlocks(ceil((float)_Nx/fields_threadsPerBlock.x),
+						  ceil((float)_Ny/fields_threadsPerBlock.y),
+						  ceil((float)_Nz/fields_threadsPerBlock.z));
 
-	update_E_fields <<<numBlocks, threadsPerBlock>>>
+	update_E_fields <<<fields_numBlocks, fields_threadsPerBlock>>>
 		(t, _R,
 		 _Nx, _Ny, _Nz,
 		 _dx, _dy, _dz, _dt,
@@ -632,10 +615,26 @@ void fdtd::FDTD::update_E(double t)
 		 _kappa_E_x, _kappa_E_y, _kappa_E_z,
 		 _bEx, _bEy, _bEz,
 		 _cEx, _cEy, _cEz);
-	cudaDeviceSynchronize();
 
-	update_E_sources(t);
-	//std::cout << "_Ey[62]=" << _Ey[62] << std::endl;
+    // Update sources
+    for(auto const& src : _sources) {
+		dim3 sources_threadsPerBlock(8, 8, 8);
+		dim3 sources_numBlocks(ceil((float) src.K/sources_threadsPerBlock.x),
+							   ceil((float) src.J/sources_threadsPerBlock.y),
+							   ceil((float) src.I/sources_threadsPerBlock.z));
+
+		update_E_sources <<<sources_numBlocks, sources_threadsPerBlock>>>
+			(t,
+			 _Nx, _Ny, _Nz,
+			 _dt,
+			 _Ex, _Ey, _Ez,
+			 _eps_x, _eps_y, _eps_z,
+			 _src_T, _src_min, _src_k,
+			 src.i0, src.j0, src.k0,
+			 src.I, src.J, src.K,
+			 src.Jx, src.Jy, src.Jz);
+		cudaDeviceSynchronize();
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1382,9 +1381,6 @@ void fdtd::FDTD::add_source(complex128 *Jx, complex128 *Jy, complex128 *Jz,
                             int i0, int j0, int k0, int I, int J, int K,
                             bool calc_phase)
 {
-    int ind=0;
-    double real, imag;
-    SourceArray src = {Jx, Jy, Jz, Mx, My, Mz, i0, j0, k0, I, J, K};
 
     // these source arrays may *actually* be compelx-valued. In the time
     // domain, complex values correspond to temporal phase shifts. We need
@@ -1397,71 +1393,98 @@ void fdtd::FDTD::add_source(complex128 *Jx, complex128 *Jy, complex128 *Jz,
     // In order to account for this minus sign, we need to invert the sign
     // of the calculated phase.
     if(calc_phase) {
+		int ind=0;
+		double real, imag;
 
-    for(int i = 0; i < I; i++) {
-        for(int j = 0; j < J; j++) {
-            for(int k = 0; k < K; k++) {
-                ind = i*J*K + j*K + k;
+		for(int i = 0; i < I; i++) {
+			for(int j = 0; j < J; j++) {
+				for(int k = 0; k < K; k++) {
+					ind = i*J*K + j*K + k;
 
 
-                // Jx
-                real = Jx[ind].real;
-                imag = Jx[ind].imag;
+					// Jx
+					real = Jx[ind].real;
+					imag = Jx[ind].imag;
 
-                Jx[ind].real = sqrt(real*real + imag*imag);
-                if(imag == 0 && real == 0) Jx[ind].imag = 0.0;
-                else Jx[ind].imag = -1*atan2(imag, real);
+					Jx[ind].real = sqrt(real*real + imag*imag);
+					if(imag == 0 && real == 0) Jx[ind].imag = 0.0;
+					else Jx[ind].imag = -1*atan2(imag, real);
 
-                // Jy
-                real = Jy[ind].real;
-                imag = Jy[ind].imag;
+					// Jy
+					real = Jy[ind].real;
+					imag = Jy[ind].imag;
 
-                Jy[ind].real = sqrt(real*real + imag*imag);
-                if(imag == 0 && real == 0) Jy[ind].imag = 0.0;
-                else Jy[ind].imag = -1*atan2(imag, real);
+					Jy[ind].real = sqrt(real*real + imag*imag);
+					if(imag == 0 && real == 0) Jy[ind].imag = 0.0;
+					else Jy[ind].imag = -1*atan2(imag, real);
 
-                // Jz
-                real = Jz[ind].real;
-                imag = Jz[ind].imag;
+					// Jz
+					real = Jz[ind].real;
+					imag = Jz[ind].imag;
 
-                Jz[ind].real = sqrt(real*real + imag*imag);
-                if(imag == 0 && real == 0) Jz[ind].imag = 0.0;
-                else Jz[ind].imag = -1*atan2(imag, real);
+					Jz[ind].real = sqrt(real*real + imag*imag);
+					if(imag == 0 && real == 0) Jz[ind].imag = 0.0;
+					else Jz[ind].imag = -1*atan2(imag, real);
 
-                // Mx
-                real = Mx[ind].real;
-                imag = Mx[ind].imag;
+					// Mx
+					real = Mx[ind].real;
+					imag = Mx[ind].imag;
 
-                Mx[ind].real = sqrt(real*real + imag*imag);
-                if(imag == 0 && real == 0) Mx[ind].imag = 0.0;
-                else Mx[ind].imag = -1*atan2(imag, real);
+					Mx[ind].real = sqrt(real*real + imag*imag);
+					if(imag == 0 && real == 0) Mx[ind].imag = 0.0;
+					else Mx[ind].imag = -1*atan2(imag, real);
 
-                // My
-                real = My[ind].real;
-                imag = My[ind].imag;
+					// My
+					real = My[ind].real;
+					imag = My[ind].imag;
 
-                My[ind].real = sqrt(real*real + imag*imag);
-                if(imag == 0 && real == 0) My[ind].imag = 0.0;
-                else My[ind].imag = -1*atan2(imag, real);
+					My[ind].real = sqrt(real*real + imag*imag);
+					if(imag == 0 && real == 0) My[ind].imag = 0.0;
+					else My[ind].imag = -1*atan2(imag, real);
 
-                // Mz
-                real = Mz[ind].real;
-                imag = Mz[ind].imag;
+					// Mz
+					real = Mz[ind].real;
+					imag = Mz[ind].imag;
 
-                Mz[ind].real = sqrt(real*real + imag*imag);
-                if(imag == 0 && real == 0) Mz[ind].imag = 0.0;
-                else Mz[ind].imag = -1*atan2(imag, real);
+					Mz[ind].real = sqrt(real*real + imag*imag);
+					if(imag == 0 && real == 0) Mz[ind].imag = 0.0;
+					else Mz[ind].imag = -1*atan2(imag, real);
 
-            }
-        }
+				}
+			}
+		}
     }
-    }
+	else {
+		int N = I * J * K;
+		complex128 *cuda_Jx, *cuda_Jy, *cuda_Jz, *cuda_Mx, *cuda_My, *cuda_Mz;
+		cudaMallocManaged((void **)&cuda_Jx, N*sizeof(complex128));
+		cudaMallocManaged((void **)&cuda_Jy, N*sizeof(complex128));
+		cudaMallocManaged((void **)&cuda_Jz, N*sizeof(complex128));
+		cudaMallocManaged((void **)&cuda_Mx, N*sizeof(complex128));
+		cudaMallocManaged((void **)&cuda_My, N*sizeof(complex128));
+		cudaMallocManaged((void **)&cuda_Mz, N*sizeof(complex128));
+		memcpy(cuda_Jx, Jx, N*sizeof(complex128));
+		memcpy(cuda_Jy, Jy, N*sizeof(complex128));
+		memcpy(cuda_Jz, Jz, N*sizeof(complex128));
+		memcpy(cuda_Mx, Mx, N*sizeof(complex128));
+		memcpy(cuda_My, My, N*sizeof(complex128));
+		memcpy(cuda_Mz, Mz, N*sizeof(complex128));
 
-    _sources.push_back(src);
+		SourceArray src = {cuda_Jx, cuda_Jy, cuda_Jz, cuda_Mx, cuda_My, cuda_Mz, i0, j0, k0, I, J, K};
+		_sources.push_back(src);
+	}
 }
 
 void fdtd::FDTD::clear_sources()
 {
+    for(auto const& src : _sources) {
+		cudaFree(src.Jx);
+		cudaFree(src.Jy);
+		cudaFree(src.Jz);
+		cudaFree(src.Mx);
+		cudaFree(src.My);
+		cudaFree(src.Mz);
+	}
     _sources.clear();
 }
 
@@ -1481,6 +1504,7 @@ inline double fdtd::FDTD::src_func_t(double t, double phase)
     else
         return sin(t + phase);
 }
+
 
 ///////////////////////////////////////////////////////////////////////////
 // Boundary Conditions

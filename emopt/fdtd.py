@@ -1059,7 +1059,7 @@ class FDTD(MaxwellSolver):
             self._gc.update_local_vector(self._Hy)
             self._gc.update_local_vector(self._Hz)
 
-            if False:
+            if self.verbose>10:
                 print(f'_N=({self._Nz, self._Ny, self._Nx})')
                 fig,ax=plt.subplots(self._Nz,6)
                 fig.canvas.set_window_title('nocuda after H update')
@@ -1083,7 +1083,7 @@ class FDTD(MaxwellSolver):
             self._gc.update_local_vector(self._Ey)
             self._gc.update_local_vector(self._Ez)
 
-            if False:
+            if self.verbose>10:
                 print(f'_N=({self._Nz, self._Ny, self._Nx})')
                 fig,ax=plt.subplots(self._Nz,6)
                 fig.canvas.set_window_title('nocuda after E update')

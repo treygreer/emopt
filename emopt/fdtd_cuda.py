@@ -964,7 +964,7 @@ class FDTD(MaxwellSolver):
 
             libFDTD.FDTD_update_H(self._libfdtd, n*dt)
  
-            if False:
+            if self.verbose>10:
                 print(f'_N=({self._Nz, self._Ny, self._Nx})')
                 fig,ax=plt.subplots(self._Nz,6)
                 fig.canvas.set_window_title('cuda after H update')
@@ -985,7 +985,7 @@ class FDTD(MaxwellSolver):
 
             libFDTD.FDTD_update_E(self._libfdtd, (n+0.5)*dt)
 
-            if False:
+            if self.verbose>10:
                 print(f'_N=({self._Nz, self._Ny, self._Nx})')
                 fig,ax=plt.subplots(self._Nz,6)
                 fig.canvas.set_window_title('cuda after E update')
