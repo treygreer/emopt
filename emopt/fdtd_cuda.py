@@ -918,7 +918,6 @@ class FDTD(MaxwellSolver):
         self._Hx.fill(0); self._Hy.fill(0); self._Hz.fill(0)
 
         Tn = np.int(self._Ncycle*3/4)
-        p = 0
 
         Ex0 = np.zeros(self._nconv); Ey0 = np.zeros(self._nconv); Ez0 = np.zeros(self._nconv)
         Ex1 = np.zeros(self._nconv); Ey1 = np.zeros(self._nconv); Ez1 = np.zeros(self._nconv)
@@ -957,139 +956,87 @@ class FDTD(MaxwellSolver):
                                 'emopt.fdtd')
                 break
                 
-            if(n == self._num_time_steps):
+            if(self._num_time_steps and (n >= self._num_time_steps)):
                 warning_message('Specified number of time steps executed.',
                                 'emopt.fdtd')
                 break
 
-            libFDTD.FDTD_update_H(self._libfdtd, n*dt)
- 
-            if self.verbose>10:
-                print(f'_N=({self._Nz, self._Ny, self._Nx})')
-                fig,ax=plt.subplots(self._Nz,6)
-                fig.canvas.set_window_title('cuda after H update')
-                plotHx = np.reshape(self._Hx, [self._Nz, self._Ny, self._Nx])
-                plotHy = np.reshape(self._Hy, [self._Nz, self._Ny, self._Nx])
-                plotHz = np.reshape(self._Hz, [self._Nz, self._Ny, self._Nx])
-                plotEx = np.reshape(self._Ex, [self._Nz, self._Ny, self._Nx])
-                plotEy = np.reshape(self._Ey, [self._Nz, self._Ny, self._Nx])
-                plotEz = np.reshape(self._Ez, [self._Nz, self._Ny, self._Nx])
-                for plot_iz in range(self._Nz):
-                    ax[plot_iz,0].matshow(plotHx[plot_iz,...])
-                    ax[plot_iz,1].matshow(plotHy[plot_iz,...])
-                    ax[plot_iz,2].matshow(plotHz[plot_iz,...])
-                    ax[plot_iz,3].matshow(plotEx[plot_iz,...])
-                    ax[plot_iz,4].matshow(plotEy[plot_iz,...])
-                    ax[plot_iz,5].matshow(plotEz[plot_iz,...])
-                #print(f'in python:  _Ey[62] = {self._Ey[62]}')
+            libFDTD.FDTD_update(self._libfdtd, n*dt, Tn)
+            n += Tn
 
-            libFDTD.FDTD_update_E(self._libfdtd, (n+0.5)*dt)
+            # Update times of field snapshots
+            t0 = t1
+            t1 = t2
+            t2 = n*dt
 
-            if self.verbose>10:
-                print(f'_N=({self._Nz, self._Ny, self._Nx})')
-                fig,ax=plt.subplots(self._Nz,6)
-                fig.canvas.set_window_title('cuda after E update')
-                plotHx = np.reshape(self._Hx, [self._Nz, self._Ny, self._Nx])
-                plotHy = np.reshape(self._Hy, [self._Nz, self._Ny, self._Nx])
-                plotHz = np.reshape(self._Hz, [self._Nz, self._Ny, self._Nx])
-                plotEx = np.reshape(self._Ex, [self._Nz, self._Ny, self._Nx])
-                plotEy = np.reshape(self._Ey, [self._Nz, self._Ny, self._Nx])
-                plotEz = np.reshape(self._Ez, [self._Nz, self._Ny, self._Nx])
-                for plot_iz in range(self._Nz):
-                    ax[plot_iz,0].matshow(plotHx[plot_iz,...])
-                    ax[plot_iz,1].matshow(plotHy[plot_iz,...])
-                    ax[plot_iz,2].matshow(plotHz[plot_iz,...])
-                    ax[plot_iz,3].matshow(plotEx[plot_iz,...])
-                    ax[plot_iz,4].matshow(plotEy[plot_iz,...])
-                    ax[plot_iz,5].matshow(plotEz[plot_iz,...])
+            phi0[:] = phi1
+            A0[:] = A1
+            for q in range(self._nconv):
+                conv_index = self._conv_pts[q]
 
-                plt.show()
+                # start with Ex
+                Ex0[q] = Ex1[q]
+                Ex1[q] = Ex2[q]
+                Ex2[q] = np.real(self._Ex[conv_index])
 
-            if(p == Tn-1):
-                # Update times of field snapshots
-                t0 = t1
-                t1 = t2
-                t2 = n*dt
+                Ey0[q] = Ey1[q]
+                Ey1[q] = Ey2[q]
+                Ey2[q] = np.real(self._Ey[conv_index])
 
-                phi0[:] = phi1
-                A0[:] = A1
-                for q in range(self._nconv):
-                    conv_index = self._conv_pts[q]
+                Ez0[q] = Ez1[q]
+                Ez1[q] = Ez2[q]
+                Ez2[q] = np.real(self._Ez[conv_index])
 
-                    # start with Ex
-                    Ex0[q] = Ex1[q]
-                    Ex1[q] = Ex2[q]
-                    Ex2[q] = np.real(self._Ex[conv_index])
+                phasex = libFDTD.FDTD_calc_phase_3T(t0, t1, t2,
+                                                    Ex0[q], Ex1[q], Ex2[q])
+                phasey = libFDTD.FDTD_calc_phase_3T(t0, t1, t2,
+                                                    Ey0[q], Ey1[q], Ey2[q])
+                phasez = libFDTD.FDTD_calc_phase_3T(t0, t1, t2,
+                                                    Ez0[q], Ez1[q], Ez2[q])
 
-                    Ey0[q] = Ey1[q]
-                    Ey1[q] = Ey2[q]
-                    Ey2[q] = np.real(self._Ey[conv_index])
+                ampx = libFDTD.FDTD_calc_amplitude_3T(t0, t1, t2, Ex0[q],
+                                                      Ex1[q], Ex2[q], phasex)
+                ampy = libFDTD.FDTD_calc_amplitude_3T(t0, t1, t2, Ey0[q],
+                                                      Ey1[q], Ey2[q], phasey)
+                ampz = libFDTD.FDTD_calc_amplitude_3T(t0, t1, t2, Ez0[q],
+                                                      Ez1[q], Ez2[q], phasez)
 
-                    Ez0[q] = Ez1[q]
-                    Ez1[q] = Ez2[q]
-                    Ez2[q] = np.real(self._Ez[conv_index])
+                if(ampx < 0):
+                    ampx *= -1
+                    phasex += pi
+                if(ampy < 0):
+                    ampy *= -1
+                    phasey += pi
+                if(ampz < 0):
+                    ampz *= -1
+                    phasez += pi
 
-                    phasex = libFDTD.FDTD_calc_phase_3T(t0, t1, t2,
-                                                        Ex0[q], Ex1[q], Ex2[q])
-                    phasey = libFDTD.FDTD_calc_phase_3T(t0, t1, t2,
-                                                        Ey0[q], Ey1[q], Ey2[q])
-                    phasez = libFDTD.FDTD_calc_phase_3T(t0, t1, t2,
-                                                        Ez0[q], Ez1[q], Ez2[q])
+                phi1[q] = phasex + phasey + phasez
+                A1[q] = ampx + ampy + ampz
 
-                    ampx = libFDTD.FDTD_calc_amplitude_3T(t0, t1, t2, Ex0[q],
-                                                          Ex1[q], Ex2[q], phasex)
-                    ampy = libFDTD.FDTD_calc_amplitude_3T(t0, t1, t2, Ey0[q],
-                                                          Ey1[q], Ey2[q], phasey)
-                    ampz = libFDTD.FDTD_calc_amplitude_3T(t0, t1, t2, Ez0[q],
-                                                          Ez1[q], Ez2[q], phasez)
+            A_change = np.linalg.norm(A1-A0)/np.linalg.norm(A0)
+            phi_change = np.linalg.norm(phi1-phi0)/np.linalg.norm(phi0)
 
-                    if(ampx < 0):
-                        ampx *= -1
-                        phasex += pi
-                    if(ampy < 0):
-                        ampy *= -1
-                        phasey += pi
-                    if(ampz < 0):
-                        ampz *= -1
-                        phasez += pi
+            if(self.verbose > 1):  # and n > 2*Tn):
+                print(f'phi1={phi1}')
+                print(f'A1={A1}')
+                print('time step: {0: <8d} Delta A: {1: <12.4e} ' \
+                      'Delta Phi: {2: <12.4e}'.format(n, A_change, phi_change))
 
-                    phi1[q] = phasex + phasey + phasez
-                    A1[q] = ampx + ampy + ampz
-
-                A_change = np.linalg.norm(A1-A0)/np.linalg.norm(A0)
-                phi_change = np.linalg.norm(phi1-phi0)/np.linalg.norm(phi0)
-
-                if(self.verbose > 1):  # and n > 2*Tn):
-                    print(f'phi1={phi1}')
-                    print(f'A1={A1}')
-                    print('time step: {0: <8d} Delta A: {1: <12.4e} ' \
-                          'Delta Phi: {2: <12.4e}'.format(n, A_change, phi_change))
-
-                p = 0
-            else:
-                p += 1
-
-            n += 1
-
-        print(f'executed {n} time steps')
-
+        t0 = n*dt
         libFDTD.FDTD_capture_t0_fields(self._libfdtd)
 
         # perform a couple more iterations to get a second time point
-        n0 = n
-        for n in range(Tn):
-            libFDTD.FDTD_update_H(self._libfdtd, (n+n0)*dt)
-            libFDTD.FDTD_update_E(self._libfdtd, (n+n0+0.5)*dt)
-
+        libFDTD.FDTD_update(self._libfdtd, n*dt, Tn)
+        n += Tn
+        t1 = n*dt
         libFDTD.FDTD_capture_t1_fields(self._libfdtd)
 
-        for n in range(Tn):
-            libFDTD.FDTD_update_H(self._libfdtd, (n+n0+Tn)*dt)
-            libFDTD.FDTD_update_E(self._libfdtd, (n+n0+Tn+0.5)*dt)
+        libFDTD.FDTD_update(self._libfdtd, n*dt, Tn)
+        n += Tn
+        t2 = n*dt
 
-        t0 = n0*dt
-        t1 = (n0+Tn)*dt
-        t2 = (n0+2*Tn)*dt
+        print(f't0={t0}, t1={t1}, t2={t2}, executed {n} timesteps')
         libFDTD.FDTD_calc_complex_fields_3T(self._libfdtd, t0, t1, t2)
 
     def solve_forward(self):

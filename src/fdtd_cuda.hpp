@@ -305,14 +305,22 @@ namespace fdtd {
             void set_complex_eps(bool complex_eps);
 
             /*!
-             * Update the magnetic field at time t using the electric field at time t-1/2*dt.
+             * Update the magnetic and electric fields num_times, starting at time start_time.
+             *
+             * \param start_time - The start time of the update = n*dt.
+             * \param num_times -  the number of updates
+             */
+		    void update(double start_time, int num_times);
+
+            /*!
+             * Update the magnetic field at time t
              *
              * \param t - The time of the update = n*dt.
              */
             void update_H(double t);
 
             /*!
-             * Update the electric field at time t using the magnetic field at time t-1/2*dt.
+             * Update the electric field at time t
              *
              * \param t - The time of the update = n*dt+1/2*dt.
              */
@@ -499,8 +507,7 @@ extern "C" {
                                     double dx, double dy, double dz);
         void FDTD_set_dt(fdtd::FDTD* fdtd, double dt);
         void FDTD_set_complex_eps(fdtd::FDTD* fdtd, bool complex_eps);
-        void FDTD_update_H(fdtd::FDTD* fdtd, double t);
-        void FDTD_update_E(fdtd::FDTD* fdtd, double t);
+ 	    void FDTD_update(fdtd::FDTD* fdtd, double start_time, int num_times);
 
         // Pml management
         void FDTD_set_pml_widths(fdtd::FDTD* fdtd, int xmin, int xmax,

@@ -59,11 +59,8 @@ libFDTD.FDTD_set_dt.restype = None
 libFDTD.FDTD_set_complex_eps.argtypes = [c_void_p, c_bool]
 libFDTD.FDTD_set_complex_eps.restype = None
 
-libFDTD.FDTD_update_H.argtypes = [c_void_p, c_double]
-libFDTD.FDTD_update_H.restype = None
-
-libFDTD.FDTD_update_E.argtypes = [c_void_p, c_double]
-libFDTD.FDTD_update_E.restype = None
+libFDTD.FDTD_update.argtypes = [c_void_p, c_double, c_int]
+libFDTD.FDTD_update.restype = None
 
 libFDTD.FDTD_set_pml_widths.argtypes = [c_void_p, c_int, c_int,
                                                   c_int, c_int,

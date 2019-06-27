@@ -6,6 +6,13 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 
+/* Cuda TODO:
+  o  check all cuda routines for error
+  o  3D array allocation using cudaMallod3D() ?
+  o 
+
+*/
+
 fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 {
     _Nx = Nx;
@@ -660,9 +667,20 @@ void fdtd::FDTD::update_E(double t)
 			 src.i0, src.j0, src.k0,
 			 src.I, src.J, src.K,
 			 src.Jx, src.Jy, src.Jz);
-		cudaDeviceSynchronize();
 	}
 }
+
+void fdtd::FDTD::update(double start_time, int num_time_steps)
+{
+	double time = start_time;
+    for(int i = 0; i < num_time_steps; ++i) {
+		update_H(time);
+		update_E(time + _dt/2.0);
+		time += _dt;
+	}
+	cudaDeviceSynchronize();
+}
+
 
 ///////////////////////////////////////////////////////////////////////////
 // PML Management
@@ -1574,14 +1592,9 @@ void FDTD_set_complex_eps(fdtd::FDTD* fdtd, bool complex_eps)
     fdtd->set_complex_eps(complex_eps);
 }
 
-void FDTD_update_H(fdtd::FDTD* fdtd, double t)
+void FDTD_update(fdtd::FDTD* fdtd, double start_time, int num_time_steps)
 {
-    fdtd->update_H(t);
-}
-
-void FDTD_update_E(fdtd::FDTD* fdtd, double t)
-{
-    fdtd->update_E(t);
+    fdtd->update(start_time, num_time_steps);
 }
 
 void FDTD_set_pml_widths(fdtd::FDTD* fdtd, int xmin, int xmax,
