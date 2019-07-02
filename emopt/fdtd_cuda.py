@@ -1036,7 +1036,8 @@ class FDTD(MaxwellSolver):
         n += Tn
         t2 = n*dt
 
-        print(f't0={t0}, t1={t1}, t2={t2}, executed {n} timesteps')
+        print(f't0={t0}, t1={t1}, t2={t2}')
+        print(f'executed {n} timesteps')
         libFDTD.FDTD_calc_complex_fields_3T(self._libfdtd, t0, t1, t2)
 
     def solve_forward(self):

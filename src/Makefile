@@ -14,11 +14,11 @@ else
 	endif
 endif
 
-CXXFLAGS = -Wall -fopenmp -O3 -march=native -DNDEBUG -std=c++11
-NVCXXFLAGS = -DNDEBUG -O3 -std=c++11
+CXXFLAGS = -Wall -fopenmp -O3 -march=native -DNDEBUG -std=c++11 -g
+NVCXXFLAGS = -DNDEBUG -O3 -std=c++11 -lineinfo -Xptxas="-v"
 
 INCLUDES = -I${EIGEN_DIR} -I${BOOST_DIR}
-LDFLAGS = -lpthread -lcuda -lcudart -L/usr/local/cuda/lib64
+LDFLAGS = -lpthread -lcuda -lcudart -L/usr/local/cuda/lib64 -g
 
 all: Grid.o Grid_ctypes.o FDTD.o FDTD_cuda.o Grid.cpp Grid.hpp Grid_ctypes.cpp Grid_ctypes.hpp fdtd.cpp fdtd.hpp fdtd_cuda.cu fdtd_cuda.hpp
 	${CC} ${SHARED_FLAG} -fopenmp -fPIC -o Grid.so Grid.o Grid_ctypes.o ${LDFLAGS}

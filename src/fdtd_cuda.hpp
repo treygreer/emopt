@@ -160,18 +160,60 @@ namespace fdtd {
         int i0, j0, k0, I, J, K;
     } SourceArray;
 
+	typedef struct struct_CudaData {
+		// Field and source arrays
+		double  *Ex, *Ey, *Ez,
+			*Hx, *Hy, *Hz;
+
+		// Material arrays
+		complex128 *eps_x, *eps_y, *eps_z,
+			*mu_x, *mu_y, *mu_z;
+
+		// number of Yee cells in X, Y, Z
+		int Nx, Ny, Nz;
+
+		// physical simulation size and Yee cell size in x,y,z
+		double dx, dy, dz;
+
+		// R over dx,dy,dz
+		double odx, ody, odz;
+
+		// time step
+		double dt;
+
+		// source time parameters
+		double src_T, src_min, src_k, src_n0;
+
+
+		char bc0, bc1, bc2;
+
+		// PML arrays -- because convolutions
+		// Not ever processor will need all of different PML layers.
+		// For example, a processor which touches the xmin boundary of the
+		// simulation only needs to store pml values corresponding to derivatives
+		// along the x direction.
+        int pml_xmin, pml_xmax, pml_ymin, pml_ymax, pml_zmin, pml_zmax;
+		double *pml_Exy0, *pml_Exy1, *pml_Exz0, *pml_Exz1,
+			*pml_Eyx0, *pml_Eyx1, *pml_Eyz0, *pml_Eyz1,
+			*pml_Ezx0, *pml_Ezx1, *pml_Ezy0, *pml_Ezy1,
+			*pml_Hxy0, *pml_Hxy1, *pml_Hxz0, *pml_Hxz1,
+			*pml_Hyx0, *pml_Hyx1, *pml_Hyz0, *pml_Hyz1,
+			*pml_Hzx0, *pml_Hzx1, *pml_Hzy0, *pml_Hzy1;
+
+		// precomputed pml parameters. These values are precomputed to speed things up
+		double *kappa_H_x, *kappa_H_y, *kappa_H_z, 
+			*kappa_E_x, *kappa_E_y, *kappa_E_z,
+			*bHx, *bHy, *bHz,
+			*bEx, *bEy, *bEz,
+			*cHx, *cHy, *cHz,
+			*cEx, *cEy, *cEz;
+
+	} CudaData;
+
     class FDTD {
-        private:
-            // Field and source arrays
-            double  *_Ex, *_Ey, *_Ez,
-                    *_Hx, *_Hy, *_Hz;
-
-		    // Material arrays
-            complex128 *_eps_x, *_eps_y, *_eps_z,
- 				       *_mu_x, *_mu_y, *_mu_z;
-
-            // number of Yee cells in X, Y, Z
-            int _Nx, _Ny, _Nz;
+    	private:
+ 		    // number of Yee cells in X, Y, Z
+		    int _Nx, _Ny, _Nz;
 
             // physical simulation size and Yee cell size in x,y,z
             double _X, _Y, _Z, _dx, _dy, _dz;
@@ -180,12 +222,16 @@ namespace fdtd {
             double _wavelength;
 
             // spatial normalization factor, time step
-            double _R, _dt, _odt;
+		    double _R, _dt;
 
-            // source time parameters
-            double _src_T, _src_min, _src_k, _src_n0;
+		    // Cuda data block (host copy)
+		    CudaData _hcd;
 
-            bool _complex_eps;
+            // PML parameters
+            double _sigma, _alpha, _kappa, _pow;
+
+		    // source array
+            std::vector<SourceArray> _sources;
 
             // Complex array associated field at captured
             // time steps. Technically only one set of captured fields need to be
@@ -195,36 +241,10 @@ namespace fdtd {
                        *_Ex_t1, *_Ey_t1, *_Ez_t1,
                        *_Hx_t1, *_Hy_t1, *_Hz_t1;
 
-            // PML parameters
-            int _w_pml_x0, _w_pml_x1,
-                _w_pml_y0, _w_pml_y1,
-                _w_pml_z0, _w_pml_z1;
-
-            double _sigma, _alpha, _kappa, _pow;
-
-            char _bc[3];
-
-            // PML arrays -- because convolutions
-            // Not ever processor will need all of different PML layers.
-            // For example, a processor which touches the xmin boundary of the
-            // simulation only needs to store pml values corresponding to derivatives
-            // along the x direction.
-            double *_pml_Exy0, *_pml_Exy1, *_pml_Exz0, *_pml_Exz1,
-                   *_pml_Eyx0, *_pml_Eyx1, *_pml_Eyz0, *_pml_Eyz1,
-                   *_pml_Ezx0, *_pml_Ezx1, *_pml_Ezy0, *_pml_Ezy1,
-                   *_pml_Hxy0, *_pml_Hxy1, *_pml_Hxz0, *_pml_Hxz1,
-                   *_pml_Hyx0, *_pml_Hyx1, *_pml_Hyz0, *_pml_Hyz1,
-                   *_pml_Hzx0, *_pml_Hzx1, *_pml_Hzy0, *_pml_Hzy1;
-
-            // precomputed pml parameters. These values are precomputed to speed things up
-            double *_kappa_H_x, *_kappa_H_y, *_kappa_H_z, 
-                   *_kappa_E_x, *_kappa_E_y, *_kappa_E_z,
-                   *_bHx, *_bHy, *_bHz,
-                   *_bEx, *_bEy, *_bEz,
-                   *_cHx, *_cHy, *_cHz,
-                   *_cEx, *_cEy, *_cEz;
-
-            std::vector<SourceArray> _sources;
+		    // PML parameters
+		    int _w_pml_x0, _w_pml_x1,
+			    _w_pml_y0, _w_pml_y1,
+			    _w_pml_z0, _w_pml_z1;
 
             /*!
              * Calculate the pml ramp function (which defines how the
@@ -248,6 +268,7 @@ namespace fdtd {
 
         public:
             
+		    FDTD();
   		    FDTD(int Nx, int Ny, int Nz);
             ~FDTD();
 
