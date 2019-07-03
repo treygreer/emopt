@@ -8,9 +8,6 @@
 #define pow2(x) x*x
 #define pow3(x) x*x*x
 
-// uncomment to enable lossy materials
-// #define COMPLEX_EPS
-
 /** A complex value data type that is compatible with numpy.
  *
  * Currently, the computationally intensive components of FDTD 
@@ -212,6 +209,9 @@ namespace fdtd {
 
     class FDTD {
     	private:
+		    // Cuda data block (host copy)
+		    CudaData _hcd;
+
  		    // number of Yee cells in X, Y, Z
 		    int _Nx, _Ny, _Nz;
 
@@ -221,11 +221,8 @@ namespace fdtd {
             // Wavelength defined in desired units
             double _wavelength;
 
-            // spatial normalization factor, time step
-		    double _R, _dt;
-
-		    // Cuda data block (host copy)
-		    CudaData _hcd;
+            // spatial normalization factor
+		    double _R;
 
             // PML parameters
             double _sigma, _alpha, _kappa, _pow;
@@ -318,12 +315,6 @@ namespace fdtd {
              * \param dt - The time step.
              */
             void set_dt(double dt);
-
-            /*!
-             * Set a flag that indicates whether or not the permittivity is pure real
-             * valued.
-             */
-            void set_complex_eps(bool complex_eps);
 
             /*!
              * Update the magnetic and electric fields num_times, starting at time start_time.
@@ -527,7 +518,6 @@ extern "C" {
                                     double X, double Y, double Z,
                                     double dx, double dy, double dz);
         void FDTD_set_dt(fdtd::FDTD* fdtd, double dt);
-        void FDTD_set_complex_eps(fdtd::FDTD* fdtd, bool complex_eps);
  	    void FDTD_update(fdtd::FDTD* fdtd, double start_time, int num_times);
 
         // Pml management

@@ -26,18 +26,18 @@ class CPP_COMPLEX128(Structure):
                 ("imag", c_double)]
 
 class CPP_FDTD(Structure):
-    _fields_ = [("_Ex", POINTER(c_double)),
-                ("_Ey", POINTER(c_double)),
-                ("_Ez", POINTER(c_double)),
-                ("_Hx", POINTER(c_double)),
-                ("_Hy", POINTER(c_double)),
-                ("_Hz", POINTER(c_double)),
-                ("_eps_x", POINTER(CPP_COMPLEX128)),
-                ("_eps_y", POINTER(CPP_COMPLEX128)),
-                ("_eps_z", POINTER(CPP_COMPLEX128)),
-                ("_mu_x",  POINTER(CPP_COMPLEX128)),
-                ("_mu_y",  POINTER(CPP_COMPLEX128)),
-                ("_mu_z",  POINTER(CPP_COMPLEX128))]
+    _fields_ = [("Ex", POINTER(c_double)),
+                ("Ey", POINTER(c_double)),
+                ("Ez", POINTER(c_double)),
+                ("Hx", POINTER(c_double)),
+                ("Hy", POINTER(c_double)),
+                ("Hz", POINTER(c_double)),
+                ("eps_x", POINTER(CPP_COMPLEX128)),
+                ("eps_y", POINTER(CPP_COMPLEX128)),
+                ("eps_z", POINTER(CPP_COMPLEX128)),
+                ("mu_x",  POINTER(CPP_COMPLEX128)),
+                ("mu_y",  POINTER(CPP_COMPLEX128)),
+                ("mu_z",  POINTER(CPP_COMPLEX128))]
 
 #######################################################
 # ctypes interface definition
@@ -55,9 +55,6 @@ libFDTD.FDTD_set_physical_dims.restype = None
 
 libFDTD.FDTD_set_dt.argtypes = [c_void_p, c_double]
 libFDTD.FDTD_set_dt.restype = None
-
-libFDTD.FDTD_set_complex_eps.argtypes = [c_void_p, c_bool]
-libFDTD.FDTD_set_complex_eps.restype = None
 
 libFDTD.FDTD_update.argtypes = [c_void_p, c_double, c_int]
 libFDTD.FDTD_update.restype = None

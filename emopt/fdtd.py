@@ -1101,6 +1101,7 @@ class FDTD(MaxwellSolver):
                     ax[plot_iz-1,4].matshow(plotEy[plot_iz,1:-1,1:-1])
                     ax[plot_iz-1,5].matshow(plotEz[plot_iz,1:-1,1:-1])
                 plt.show()
+                print(plotEy[2+1])
 
             if(p == Tn-1):
                 # Update times of field snapshots

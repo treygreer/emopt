@@ -125,8 +125,9 @@ void fdtd::FDTD::set_dt(double dt)
 __device__
 double cuda_src_func_t(double t, double phase)
 {
-    if(t <= cd.src_T)
-        return sin(t + phase)*((1+cd.src_min) * exp(-(t-cd.src_T)*(t-cd.src_T) / cd.src_k) - cd.src_min);
+    if(t <= cd.src_T) {
+        return sin(t + phase)*((1.0+cd.src_min) * exp(-(t-cd.src_T)*(t-cd.src_T) / cd.src_k) - cd.src_min);
+	}
     else
         return sin(t + phase);
 }
@@ -149,7 +150,6 @@ void update_H_fields(double t)
 	int Ny = cd.Ny;
 	int Nz = cd.Nz;
 	if ((i < Nz) && (j < Ny) && (k < Nx)) {
-
         int kill_zwrap = (cd.bc2 != 'P' && i == Nz-1) ? 1 : 0;
 		int ip1 = i==Nz-1 ? 0 : i+1;
 
@@ -285,7 +285,7 @@ void update_H_fields(double t)
 }
 
 __global__
-void update_H_sources(double t,
+void update_H_source(double t,
 					  int i0s, int j0s, int k0s,
 					  int Is, int Js, int Ks,
 					  complex128 *Mx, complex128 *My, complex128 *Mz)
@@ -316,7 +316,7 @@ void update_H_sources(double t,
 
 void fdtd::FDTD::update_H(double t)
 {
-	dim3 fields_threadsPerBlock(8, 8, 8);
+	dim3 fields_threadsPerBlock(8, 8, 8); 
 	dim3 fields_numBlocks(ceil((float)_Nx/fields_threadsPerBlock.x),
 						  ceil((float)_Ny/fields_threadsPerBlock.y),
 						  ceil((float)_Nz/fields_threadsPerBlock.z));
@@ -324,12 +324,12 @@ void fdtd::FDTD::update_H(double t)
 	update_H_fields <<<fields_numBlocks, fields_threadsPerBlock>>> (t);
     // Update sources
     for(auto const& src : _sources) {
-		dim3 sources_threadsPerBlock(8, 8, 8);
+		dim3 sources_threadsPerBlock(8, 8, 8); 
 		dim3 sources_numBlocks(ceil((float) src.K/sources_threadsPerBlock.x),
 							   ceil((float) src.J/sources_threadsPerBlock.y),
 							   ceil((float) src.I/sources_threadsPerBlock.z));
 
-		update_H_sources <<<sources_numBlocks, sources_threadsPerBlock>>>
+		update_H_source <<<sources_numBlocks, sources_threadsPerBlock>>>
 			(t,
 			 src.i0, src.j0, src.k0,
 			 src.I, src.J, src.K,
@@ -501,7 +501,7 @@ void update_E_fields(double t)
 }
 
 __global__
-void update_E_sources(double t,
+void update_E_source(double t,
 					  int i0s, int j0s, int k0s,
 					  int Is, int Js, int Ks,
 					  complex128 *Jx, complex128 *Jy, complex128 *Jz)
@@ -550,8 +550,7 @@ void fdtd::FDTD::update_E(double t)
 		dim3 sources_numBlocks(ceil((float) src.K/sources_threadsPerBlock.x),
 							   ceil((float) src.J/sources_threadsPerBlock.y),
 							   ceil((float) src.I/sources_threadsPerBlock.z));
-
-		update_E_sources <<<sources_numBlocks, sources_threadsPerBlock>>>
+		update_E_source <<<sources_numBlocks, sources_threadsPerBlock>>>
 			(t,
 			 src.i0, src.j0, src.k0,
 			 src.I, src.J, src.K,
@@ -577,13 +576,17 @@ void fdtd::FDTD::update(double start_time, int num_time_steps)
 	_hcd.pml_zmin = _w_pml_z0;
 	_hcd.pml_zmax = _Nz-_w_pml_z1;
 
-	cudaMemcpyToSymbol(&_hcd, &cd, sizeof(CudaData));
+	int err = cudaMemcpyToSymbol(cd, &_hcd, sizeof(CudaData));
+	if (err) {
+		printf("constant copy error code = %d\n", err);
+		exit(-1);
+	}
 
 	double time = start_time;
     for(int i = 0; i < num_time_steps; ++i) {
 		update_H(time);
-		update_E(time + _dt/2.0);
-		time += _dt;
+		update_E(time + _hcd.dt/2.0);
+		time += _hcd.dt;
 	}
 	cudaDeviceSynchronize();
 }
@@ -847,7 +850,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         alpha = _alpha * (1-pml_factor);
         kappa = (_kappa-1.0) * pml_factor+1.0;
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -862,7 +865,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         alpha = _alpha * (1-pml_factor);
         kappa = (_kappa-1) * pml_factor+1;
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -879,7 +882,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         kappa = (_kappa-1) * pml_factor+1;
         alpha = _alpha * (1-pml_factor);
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -894,7 +897,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         kappa = (_kappa-1) * pml_factor+1;
         alpha = _alpha * (1-pml_factor);
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -911,7 +914,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         kappa = (_kappa-1) * pml_factor+1;
         alpha = _alpha * (1-pml_factor);
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -926,7 +929,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         kappa = (_kappa-1) * pml_factor+1;
         alpha = _alpha * (1-pml_factor);
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -943,7 +946,7 @@ void fdtd::FDTD::compute_pml_params()
          sigma = _sigma * pml_factor;
          kappa = (_kappa-1) * pml_factor+1;
          alpha = _alpha * (1-pml_factor);
-         b = exp(-_dt*(sigma/kappa + alpha));
+         b = exp(-_hcd.dt*(sigma/kappa + alpha));
          if(b == 1) c = 0;
          else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -958,7 +961,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         kappa = (_kappa-1) * pml_factor+1;
         alpha = _alpha * (1-pml_factor);
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -975,7 +978,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         kappa = (_kappa-1) * pml_factor+1;
         alpha = _alpha * (1-pml_factor);
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c= 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -991,7 +994,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         kappa = (_kappa-1) * pml_factor+1;
         alpha = _alpha * (1-pml_factor);
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -1008,7 +1011,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         kappa = (_kappa-1) * pml_factor+1;
         alpha = _alpha * (1-pml_factor);
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -1025,7 +1028,7 @@ void fdtd::FDTD::compute_pml_params()
         sigma = _sigma * pml_factor;
         kappa = (_kappa-1) * pml_factor+1;
         alpha = _alpha * (1-pml_factor);
-        b = exp(-_dt*(sigma/kappa + alpha));
+        b = exp(-_hcd.dt*(sigma/kappa + alpha));
         if(b == 1) c = 0;
         else c = (b - 1)*sigma / (sigma*kappa + kappa*kappa*alpha);
 
@@ -1108,8 +1111,8 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1)
     double f0, f1, phi, A, t0H, t1H;
     int ind_ijk;
 
-    t0H = t0 - 0.5*_dt;
-    t1H = t1 - 0.5*_dt;
+    t0H = t0 - 0.5*_hcd.dt;
+    t1H = t1 - 0.5*_hcd.dt;
 
     for(int i = 0; i < _Nz; i++) {
         for(int j = 0; j < _Ny; j++) {
@@ -1200,9 +1203,9 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
     double f0, f1, f2, phi, A, t0H, t1H, t2H;
     int ind_ijk;
 
-    t0H = t0 - 0.5*_dt;
-    t1H = t1 - 0.5*_dt;
-    t2H = t2 - 0.5*_dt;
+    t0H = t0 - 0.5*_hcd.dt;
+    t1H = t1 - 0.5*_hcd.dt;
+    t2H = t2 - 0.5*_hcd.dt;
 
     for(int i = 0; i < _Nz; i++) {
         for(int j = 0; j < _Ny; j++) {
@@ -1508,11 +1511,6 @@ void FDTD_set_physical_dims(fdtd::FDTD* fdtd,
 void FDTD_set_dt(fdtd::FDTD* fdtd, double dt)
 {
     fdtd->set_dt(dt);
-}
-
-void FDTD_set_complex_eps(fdtd::FDTD* fdtd, bool complex_eps)
-{
-    fdtd->set_complex_eps(complex_eps);
 }
 
 void FDTD_update(fdtd::FDTD* fdtd, double start_time, int num_time_steps)

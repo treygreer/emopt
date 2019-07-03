@@ -14,8 +14,8 @@ else
 	endif
 endif
 
-CXXFLAGS = -Wall -fopenmp -O3 -march=native -DNDEBUG -std=c++11 -g
-NVCXXFLAGS = -DNDEBUG -O3 -std=c++11 -lineinfo -Xptxas="-v"
+CXXFLAGS = -Wall -fopenmp -march=native -DNDEBUG -std=c++11 -g -O3
+NVCXXFLAGS = -DNDEBUG -std=c++11 -lineinfo -O3 # -Xptxas="-v" 
 
 INCLUDES = -I${EIGEN_DIR} -I${BOOST_DIR}
 LDFLAGS = -lpthread -lcuda -lcudart -L/usr/local/cuda/lib64 -g

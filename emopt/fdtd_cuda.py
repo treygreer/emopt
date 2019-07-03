@@ -297,19 +297,19 @@ class FDTD(MaxwellSolver):
         # and work vectors over to the c library
         self._libfdtd = libFDTD.FDTD_new(Nx, Ny, Nz)
         # field arrays
-        self._Ex = np.ctypeslib.as_array(self._libfdtd.contents._Ex, shape=(Nz*Ny*Nx,))
-        self._Ey = np.ctypeslib.as_array(self._libfdtd.contents._Ey, shape=(Nz*Ny*Nx,))
-        self._Ez = np.ctypeslib.as_array(self._libfdtd.contents._Ez, shape=(Nz*Ny*Nx,))
-        self._Hx = np.ctypeslib.as_array(self._libfdtd.contents._Hx, shape=(Nz*Ny*Nx,))
-        self._Hy = np.ctypeslib.as_array(self._libfdtd.contents._Hy, shape=(Nz*Ny*Nx,))
-        self._Hz = np.ctypeslib.as_array(self._libfdtd.contents._Hz, shape=(Nz*Ny*Nx,))
+        self._Ex = np.ctypeslib.as_array(self._libfdtd.contents.Ex, shape=(Nz*Ny*Nx,))
+        self._Ey = np.ctypeslib.as_array(self._libfdtd.contents.Ey, shape=(Nz*Ny*Nx,))
+        self._Ez = np.ctypeslib.as_array(self._libfdtd.contents.Ez, shape=(Nz*Ny*Nx,))
+        self._Hx = np.ctypeslib.as_array(self._libfdtd.contents.Hx, shape=(Nz*Ny*Nx,))
+        self._Hy = np.ctypeslib.as_array(self._libfdtd.contents.Hy, shape=(Nz*Ny*Nx,))
+        self._Hz = np.ctypeslib.as_array(self._libfdtd.contents.Hz, shape=(Nz*Ny*Nx,))
         # material arrays 
-        self._eps_x = np.ctypeslib.as_array(self._libfdtd.contents._eps_x, shape=(Nz*Ny*Nx,))
-        self._eps_y = np.ctypeslib.as_array(self._libfdtd.contents._eps_y, shape=(Nz*Ny*Nx,))
-        self._eps_z = np.ctypeslib.as_array(self._libfdtd.contents._eps_z, shape=(Nz*Ny*Nx,))
-        self._mu_x = np.ctypeslib.as_array(self._libfdtd.contents._mu_x, shape=(Nz*Ny*Nx,))
-        self._mu_y = np.ctypeslib.as_array(self._libfdtd.contents._mu_y, shape=(Nz*Ny*Nx,))
-        self._mu_z = np.ctypeslib.as_array(self._libfdtd.contents._mu_z, shape=(Nz*Ny*Nx,))
+        self._eps_x = np.ctypeslib.as_array(self._libfdtd.contents.eps_x, shape=(Nz*Ny*Nx,))
+        self._eps_y = np.ctypeslib.as_array(self._libfdtd.contents.eps_y, shape=(Nz*Ny*Nx,))
+        self._eps_z = np.ctypeslib.as_array(self._libfdtd.contents.eps_z, shape=(Nz*Ny*Nx,))
+        self._mu_x = np.ctypeslib.as_array(self._libfdtd.contents.mu_x, shape=(Nz*Ny*Nx,))
+        self._mu_y = np.ctypeslib.as_array(self._libfdtd.contents.mu_y, shape=(Nz*Ny*Nx,))
+        self._mu_z = np.ctypeslib.as_array(self._libfdtd.contents.mu_z, shape=(Nz*Ny*Nx,))
         self._eps_x.dtype = np.complex128
         self._eps_y.dtype = np.complex128
         self._eps_z.dtype = np.complex128
@@ -320,9 +320,6 @@ class FDTD(MaxwellSolver):
         libFDTD.FDTD_set_wavelength(self._libfdtd, wavelength)
         libFDTD.FDTD_set_physical_dims(self._libfdtd, X, Y, Z, dx, dy, dz)
         libFDTD.FDTD_set_dt(self._libfdtd, dt)
-
-        # set whether or not materials are complex valued
-        libFDTD.FDTD_set_complex_eps(self._libfdtd, complex_eps)
 
         ## Setup default PML properties
         w_pml = 15
@@ -961,8 +958,31 @@ class FDTD(MaxwellSolver):
                                 'emopt.fdtd')
                 break
 
-            libFDTD.FDTD_update(self._libfdtd, n*dt, Tn)
-            n += Tn
+            if self.verbose>10:
+                for i in range(Tn):
+                    libFDTD.FDTD_update(self._libfdtd, n*dt, 1)
+                    n += 1;
+                    print(f'_N=({self._Nz, self._Ny, self._Nx})')
+                    fig,ax=plt.subplots(self._Nz,6)
+                    fig.canvas.set_window_title('nocuda after E update')
+                    plotHx = np.reshape(self._Hx, [self._Nz, self._Ny, self._Nx])
+                    plotHy = np.reshape(self._Hy, [self._Nz, self._Ny, self._Nx])
+                    plotHz = np.reshape(self._Hz, [self._Nz, self._Ny, self._Nx])
+                    plotEx = np.reshape(self._Ex, [self._Nz, self._Ny, self._Nx])
+                    plotEy = np.reshape(self._Ey, [self._Nz, self._Ny, self._Nx])
+                    plotEz = np.reshape(self._Ez, [self._Nz, self._Ny, self._Nx])
+                    for plot_iz in range(self._Nz):
+                        ax[plot_iz,0].matshow(plotHx[plot_iz,...])
+                        ax[plot_iz,1].matshow(plotHy[plot_iz,...])
+                        ax[plot_iz,2].matshow(plotHz[plot_iz,...])
+                        ax[plot_iz,3].matshow(plotEx[plot_iz,...])
+                        ax[plot_iz,4].matshow(plotEy[plot_iz,...])
+                        ax[plot_iz,5].matshow(plotEz[plot_iz,...])
+                    plt.show()
+                    print(plotEy[2])
+                else:
+                    libFDTD.FDTD_update(self._libfdtd, n*dt, Tn)
+                    n += Tn
 
             # Update times of field snapshots
             t0 = t1
