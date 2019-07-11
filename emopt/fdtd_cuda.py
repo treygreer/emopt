@@ -980,9 +980,9 @@ class FDTD(MaxwellSolver):
                         ax[plot_iz,5].matshow(plotEz[plot_iz,...])
                     plt.show()
                     print(plotEy[2])
-                else:
-                    libFDTD.FDTD_update(self._libfdtd, n*dt, Tn)
-                    n += Tn
+            else:
+                libFDTD.FDTD_update(self._libfdtd, n*dt, Tn)
+                n += Tn
 
             # Update times of field snapshots
             t0 = t1
