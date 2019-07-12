@@ -7,13 +7,22 @@
 #include <cuda_runtime_api.h>
 
 /* Cuda TODO:
-  o  check all cuda routines for error
   o  3D array allocation using cudaMallod3D() ?
-  o 
-
 */
 
 __constant__ fdtd::CudaData cd;
+
+void* checkCudaMallocManaged(int nbytes)
+{
+	void *ptr;
+	cudaError_t code = cudaMallocManaged((void **)&ptr, nbytes);
+	if (code != cudaSuccess) {
+		std::string err_string = std::string("Cuda managed memory allocation error:  ") +
+			std::string(cudaGetErrorString(code));
+		throw err_string;
+	}
+	return ptr;
+}
 
 fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 {
@@ -23,20 +32,20 @@ fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 
 	// Allocate field arrays
 	int N = _Nz * _Ny * _Nx;
-	cudaMallocManaged((void **)&_hcd.Ex, N*sizeof(double));
-	cudaMallocManaged((void **)&_hcd.Ey, N*sizeof(double));
-	cudaMallocManaged((void **)&_hcd.Ez, N*sizeof(double));
-	cudaMallocManaged((void **)&_hcd.Hx, N*sizeof(double));
-	cudaMallocManaged((void **)&_hcd.Hy, N*sizeof(double));
-	cudaMallocManaged((void **)&_hcd.Hz, N*sizeof(double));
+	_hcd.Ex = (double *) checkCudaMallocManaged(N*sizeof(double));
+	_hcd.Ey = (double *) checkCudaMallocManaged(N*sizeof(double));
+	_hcd.Ez = (double *) checkCudaMallocManaged(N*sizeof(double));
+	_hcd.Hx = (double *) checkCudaMallocManaged(N*sizeof(double));
+	_hcd.Hy = (double *) checkCudaMallocManaged(N*sizeof(double));
+	_hcd.Hz = (double *) checkCudaMallocManaged(N*sizeof(double));
 
 	// Allocate material arrays
-	cudaMallocManaged((void **)&_hcd.eps_x, N*sizeof(complex128));
-	cudaMallocManaged((void **)&_hcd.eps_y, N*sizeof(complex128));
-	cudaMallocManaged((void **)&_hcd.eps_z, N*sizeof(complex128));
-	cudaMallocManaged((void **)&_hcd.mu_x, N*sizeof(complex128));
-	cudaMallocManaged((void **)&_hcd.mu_y, N*sizeof(complex128));
-	cudaMallocManaged((void **)&_hcd.mu_z, N*sizeof(complex128));
+	_hcd.eps_x = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
+	_hcd.eps_y = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
+	_hcd.eps_z = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
+	_hcd.mu_x = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
+	_hcd.mu_y = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
+	_hcd.mu_z = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
 
     // make sure all of our PML arrays start NULL
     _hcd.pml_Exy0 = NULL; _hcd.pml_Exy1 = NULL; _hcd.pml_Exz0 = NULL; _hcd.pml_Exz1 = NULL;
@@ -561,6 +570,8 @@ void fdtd::FDTD::update_E(double t)
 
 void fdtd::FDTD::update(double start_time, int num_time_steps)
 {
+	cudaError_t err;
+
     _hcd.odx = _R/_dx;
 	_hcd.ody = _R/_dy;
 	_hcd.odz = _R/_dz;
@@ -576,10 +587,10 @@ void fdtd::FDTD::update(double start_time, int num_time_steps)
 	_hcd.pml_zmin = _w_pml_z0;
 	_hcd.pml_zmax = _Nz-_w_pml_z1;
 
-	int err = cudaMemcpyToSymbol(cd, &_hcd, sizeof(CudaData));
-	if (err) {
-		printf("constant copy error code = %d\n", err);
-		exit(-1);
+	err = cudaMemcpyToSymbol(cd, &_hcd, sizeof(CudaData));
+	if (err != cudaSuccess) {
+		printf("Cuda constant copy error:  %s\n", cudaGetErrorString(err));
+		assert(0);
 	}
 
 	double time = start_time;
@@ -588,7 +599,16 @@ void fdtd::FDTD::update(double start_time, int num_time_steps)
 		update_E(time + _hcd.dt/2.0);
 		time += _hcd.dt;
 	}
-	cudaDeviceSynchronize();
+	cudaError_t errSync  = cudaGetLastError();
+	cudaError_t errAsync = cudaDeviceSynchronize();
+	if (errSync != cudaSuccess) {
+		printf("Cuda sync kernel error: %s\n", cudaGetErrorString(errSync));
+		exit(-1);
+	}
+	if (errAsync != cudaSuccess) {
+		printf("Cuda async kernel error: %s\n", cudaGetErrorString(errAsync));
+		exit(-1);
+	}
 }
 
 
@@ -628,13 +648,13 @@ void fdtd::FDTD::build_pml()
         // Clean up old arrays and allocate new ones
         cudaFree(_hcd.pml_Eyx0);
         cudaFree(_hcd.pml_Ezx0);
-        cudaMallocManaged((void **)&_hcd.pml_Eyx0, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Ezx0, N*sizeof(double));
+		_hcd.pml_Eyx0 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Ezx0 = (double *) checkCudaMallocManaged(N*sizeof(double));
 
         cudaFree(_hcd.pml_Hyx0);
         cudaFree(_hcd.pml_Hzx0);
-        cudaMallocManaged((void **)&_hcd.pml_Hyx0, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Hzx0, N*sizeof(double));
+		_hcd.pml_Hyx0 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Hzx0 = (double *) checkCudaMallocManaged(N*sizeof(double));
     }
 
     // touches xmax boundary
@@ -644,13 +664,13 @@ void fdtd::FDTD::build_pml()
         // Clean up old arrays and allocate new ones
         cudaFree(_hcd.pml_Eyx1);
         cudaFree(_hcd.pml_Ezx1);
-        cudaMallocManaged((void **)&_hcd.pml_Eyx1, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Ezx1, N*sizeof(double));
+		_hcd.pml_Eyx1 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Ezx1 = (double *) checkCudaMallocManaged(N*sizeof(double));
 
         cudaFree(_hcd.pml_Hyx1);
         cudaFree(_hcd.pml_Hzx1);
-        cudaMallocManaged((void **)&_hcd.pml_Hyx1, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Hzx1, N*sizeof(double));
+		_hcd.pml_Hyx1 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Hzx1 = (double *) checkCudaMallocManaged(N*sizeof(double));
     }
 
     // touches ymin boundary
@@ -659,13 +679,13 @@ void fdtd::FDTD::build_pml()
 
         cudaFree(_hcd.pml_Exy0);
 		cudaFree(_hcd.pml_Ezy0);
-        cudaMallocManaged((void **)&_hcd.pml_Exy0, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Ezy0, N*sizeof(double));
+		_hcd.pml_Exy0 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Ezy0 = (double *) checkCudaMallocManaged(N*sizeof(double));
 
         cudaFree(_hcd.pml_Hxy0);
         cudaFree(_hcd.pml_Hzy0);
-        cudaMallocManaged((void **)&_hcd.pml_Hxy0, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Hzy0, N*sizeof(double));
+		_hcd.pml_Hxy0 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Hzy0 = (double *) checkCudaMallocManaged(N*sizeof(double));
     }
 
     // touches ymax boundary
@@ -674,13 +694,13 @@ void fdtd::FDTD::build_pml()
 
         cudaFree(_hcd.pml_Exy1);
         cudaFree(_hcd.pml_Ezy1);
-        cudaMallocManaged((void **)&_hcd.pml_Exy1, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Ezy1, N*sizeof(double));
+		_hcd.pml_Exy1 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Ezy1 = (double *) checkCudaMallocManaged(N*sizeof(double));
 
         cudaFree(_hcd.pml_Hxy1);
 		cudaFree(_hcd.pml_Hzy1);
-        cudaMallocManaged((void **)&_hcd.pml_Hxy1, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Hzy1, N*sizeof(double));
+		_hcd.pml_Hxy1 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Hzy1 = (double *) checkCudaMallocManaged(N*sizeof(double));
     }
 
     // touches zmin boundary
@@ -689,13 +709,13 @@ void fdtd::FDTD::build_pml()
 
         cudaFree(_hcd.pml_Exz0);
         cudaFree(_hcd.pml_Eyz0);
-        cudaMallocManaged((void **)&_hcd.pml_Exz0, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Eyz0, N*sizeof(double));
+		_hcd.pml_Exz0 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Eyz0 = (double *) checkCudaMallocManaged(N*sizeof(double));
 
         cudaFree(_hcd.pml_Hxz0);
         cudaFree(_hcd.pml_Hyz0);
-        cudaMallocManaged((void **)&_hcd.pml_Hxz0, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Hyz0, N*sizeof(double));
+		_hcd.pml_Hxz0 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Hyz0 = (double *) checkCudaMallocManaged(N*sizeof(double));
     }
 
     // touches zmax boundary
@@ -704,13 +724,13 @@ void fdtd::FDTD::build_pml()
 
         cudaFree(_hcd.pml_Exz1);
         cudaFree(_hcd.pml_Eyz1);
-        cudaMallocManaged((void **)&_hcd.pml_Exz1, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Eyz1, N*sizeof(double));
+		_hcd.pml_Exz1 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Eyz1 = (double *) checkCudaMallocManaged(N*sizeof(double));
 
         cudaFree(_hcd.pml_Hxz1);
 		cudaFree(_hcd.pml_Hyz1);
-        cudaMallocManaged((void **)&_hcd.pml_Hxz1, N*sizeof(double));
-        cudaMallocManaged((void **)&_hcd.pml_Hyz1, N*sizeof(double));
+		_hcd.pml_Hxz1 = (double *) checkCudaMallocManaged(N*sizeof(double));
+		_hcd.pml_Hyz1 = (double *) checkCudaMallocManaged(N*sizeof(double));
     }
 
     // (re)compute the spatially-dependent PML parameters
@@ -791,48 +811,46 @@ void fdtd::FDTD::compute_pml_params()
 
     // clean up the previous arrays and allocate new ones
     cudaFree(_hcd.kappa_H_x);
-	cudaMallocManaged((void **)&_hcd.kappa_H_x, sizeof(double)*(_w_pml_x0 + _w_pml_x1));
+	_hcd.kappa_H_x = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_x0 + _w_pml_x1));
     cudaFree(_hcd.kappa_H_y);
-	cudaMallocManaged((void **)&_hcd.kappa_H_y, sizeof(double)*(_w_pml_y0 + _w_pml_y1));
+	_hcd.kappa_H_y = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_y0 + _w_pml_y1));
     cudaFree(_hcd.kappa_H_z);
-	cudaMallocManaged((void **)&_hcd.kappa_H_z, sizeof(double)*(_w_pml_z0 + _w_pml_z1));
+	_hcd.kappa_H_z = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_z0 + _w_pml_z1));
 
     cudaFree(_hcd.kappa_E_x);
-	cudaMallocManaged((void **)&_hcd.kappa_E_x, sizeof(double)*(_w_pml_x0 + _w_pml_x1));
+	_hcd.kappa_E_x = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_x0 + _w_pml_x1));
     cudaFree(_hcd.kappa_E_y);
-	cudaMallocManaged((void **)&_hcd.kappa_E_y, sizeof(double)*(_w_pml_y0 + _w_pml_y1));
+	_hcd.kappa_E_y = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_y0 + _w_pml_y1));
     cudaFree(_hcd.kappa_E_z);
-	cudaMallocManaged((void **)&_hcd.kappa_E_z, sizeof(double)*(_w_pml_z0 + _w_pml_z1));
+	_hcd.kappa_E_z = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_z0 + _w_pml_z1));
 
     cudaFree(_hcd.bHx);
-	cudaMallocManaged((void **)&_hcd.bHx, sizeof(double)*(_w_pml_x0 + _w_pml_x1));
+	_hcd.bHx = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_x0 + _w_pml_x1));
     cudaFree(_hcd.bHy);
-	cudaMallocManaged((void **)&_hcd.bHy, sizeof(double)*(_w_pml_y0 + _w_pml_y1));
+	_hcd.bHy = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_y0 + _w_pml_y1));
     cudaFree(_hcd.bHz);
-	cudaMallocManaged((void **)&_hcd.bHz, sizeof(double)*(_w_pml_z0 + _w_pml_z1));
+	_hcd.bHz = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_z0 + _w_pml_z1));
 
     cudaFree(_hcd.bEx);
-	cudaMallocManaged((void **)&_hcd.bEx, sizeof(double)*(_w_pml_x0 + _w_pml_x1));
+	_hcd.bEx = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_x0 + _w_pml_x1));
     cudaFree(_hcd.bEy);
-	cudaMallocManaged((void **)&_hcd.bEy, sizeof(double)*(_w_pml_y0 + _w_pml_y1));
+	_hcd.bEy = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_y0 + _w_pml_y1));
     cudaFree(_hcd.bEz);
-	cudaMallocManaged((void **)&_hcd.bEz, sizeof(double)*(_w_pml_z0 + _w_pml_z1));
+	_hcd.bEz = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_z0 + _w_pml_z1));
 
     cudaFree(_hcd.cHx);
-	cudaMallocManaged((void **)&_hcd.cHx, sizeof(double)*(_w_pml_x0 + _w_pml_x1));
+	_hcd.cHx = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_x0 + _w_pml_x1));
     cudaFree(_hcd.cHy);
-	cudaMallocManaged((void **)&_hcd.cHy, sizeof(double)*(_w_pml_y0 + _w_pml_y1));
+	_hcd.cHy = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_y0 + _w_pml_y1));
     cudaFree(_hcd.cHz);
-	cudaMallocManaged((void **)&_hcd.cHz, sizeof(double)*(_w_pml_z0 + _w_pml_z1));
+	_hcd.cHz = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_z0 + _w_pml_z1));
 
     cudaFree(_hcd.cEx);
-	cudaMallocManaged((void **)&_hcd.cEx, sizeof(double)*(_w_pml_x0 + _w_pml_x1));
+	_hcd.cEx = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_x0 + _w_pml_x1));
     cudaFree(_hcd.cEy);
-	cudaMallocManaged((void **)&_hcd.cEy, sizeof(double)*(_w_pml_y0 + _w_pml_y1));
+	_hcd.cEy = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_y0 + _w_pml_y1));
     cudaFree(_hcd.cEz);
-	cudaMallocManaged((void **)&_hcd.cEz, sizeof(double)*(_w_pml_z0 + _w_pml_z1));
-
-	std::cout << "after malloc, _hcd.cEz: " << _hcd.cEz << std::endl;	
+	_hcd.cEz = (double *) checkCudaMallocManaged(sizeof(double)*(_w_pml_z0 + _w_pml_z1));
 
     // calculate the PML parameters. These parameters are all functions of
     // the distance from the ONSET of the PML edge (which begins in the simulation
@@ -1493,7 +1511,15 @@ void fdtd::FDTD::set_bc(char* newbc)
 
 fdtd::FDTD* FDTD_new(int Nx, int Ny, int Nz)
 {
-    return new fdtd::FDTD(Nx, Ny, Nz);
+	fdtd::FDTD *ptr;
+	try {
+		ptr = new fdtd::FDTD(Nx, Ny, Nz);
+	}
+	catch (std::string e) {
+		std::cout << e << std::endl;
+		return 0;
+	}
+	return ptr;
 }
 
 void FDTD_set_wavelength(fdtd::FDTD* fdtd, double wavelength)
