@@ -71,29 +71,13 @@ typedef struct struct_complex128 {
 
     struct_complex128& operator=(double val) {
         real = val;
+		imag = 0;
         return *this;
     }
 
 } complex128;
 
 namespace fdtd {
-
-    /*!
-     * Calculate the phase of a sinusoidal signal using two data points.
-     *
-     * This assumes that there is no DC offset to the sinusoid. In otherwords,
-     * this function finds the phase \phi of the sinusoid
-     *
-     *      f(t) = A*\sin(\omega t + \phi)
-     *
-     * \param t0 - The time of the first sample.
-     * \param t1 - The time of the second sample.
-     * \param f0 - The first sample of the sinusoid.
-     * \param f1 - The second sample of the sinusoid.
-     *
-     * \return The phase of the sinusoid
-     */
-    double calc_phase(double t0, double t1, double f0, double f1);
 
     /*!
      * Calculates the phase of a sinusoidal signal using three data points.
@@ -113,24 +97,7 @@ namespace fdtd {
      *
      * \return the phase of the sinusoid.
      */
-    double calc_phase(double t0, double t1, double t2, double f0, double f1, double f2);
-
-    /*!
-     * Calculate the amplitude of a sinusoidal signal using two data points.
-     *
-     * This assumes that there is no DC offset to the sinusoid. In otherwords,
-     * this function finds the amplitude A of the sinusoid
-     *
-     *      f(t) = A*\sin(\omega t + \phi)
-     *
-     * \param t0 - The time of the first sample.
-     * \param t1 - The time of the second sample.
-     * \param f0 - The first sample of the sinusoid.
-     * \param f1 - The second sample of the sinusoid.
-     *
-     * \return The amplitude of the sinusoid
-     */
-    double calc_amplitude(double t0, double t1, double f0, double f1, double phase);
+    double calc_phase_3T(double t0, double t1, double t2, double f0, double f1, double f2);
 
     /*!
      * Calculates the amplitude of a sinusoidal signal using three data points.
@@ -150,7 +117,8 @@ namespace fdtd {
      *
      * \return the amplitude of the sinusoid.
      */
-    double calc_amplitude(double t0, double t1, double t2, double f0, double f1, double f2, double phase);
+    double calc_amplitude_3T(double t0, double t1, double t2,
+							 double f0, double f1, double f2, double phase);
 
     typedef struct struct_SourceArray {
         complex128 *Jx, *Jy, *Jz, *Mx, *My, *Mz;
@@ -410,21 +378,6 @@ namespace fdtd {
 
             /*!
              * Calculate the complex amplitude and phase of the fields using
-             * values for the fields at two different points in time.
-             * 
-             * In order for this to work, we need to first:
-             *  1) Check that the fields have settled into sinusoidal behavior.
-             *  2) Capture the fields at a previous time t0 using capture_t0_fields.
-             *
-             * The calculated complex fields are stored in the t0 field arrays.
-             *
-             * \param t0 - The time at which the fields were recorded in the t0 array.
-             * \param t1 - The time of the most recent field update.
-             */
-            void calc_complex_fields(double t0, double t1);
-
-            /*!
-             * Calculate the complex amplitude and phase of the fields using
              * values for the fields at three different points in time.
              * 
              * In order for this to work, we need to first:
@@ -436,7 +389,7 @@ namespace fdtd {
              * \param t1 - The time at which the fields were recorded in the t1 array.
              * \param t2 - The time of the most recent field update.
              */
-            void calc_complex_fields(double t0, double t1, double t2);
+            void calc_complex_fields_3T(double t0, double t1, double t2);
 
             // Manage source arrays
             /*!
@@ -537,15 +490,11 @@ extern "C" {
                                  complex128 *Ex_t1, complex128 *Ey_t1, complex128 *Ez_t1,
                                  complex128 *Hx_t1, complex128 *Hy_t1, complex128 *Hz_t1);
 
-        double FDTD_calc_phase_2T(double t0, double t1, double f0, double f1);
-        double FDTD_calc_amplitude_2T(double t0, double t1, double f0, double f1, double phase);
-
         double FDTD_calc_phase_3T(double t0, double t1, double t2, double f0, double f1, double f2);
         double FDTD_calc_amplitude_3T(double t0, double t1, double t2, double f0, double f1, double f2, double phase);
 
         void FDTD_capture_t0_fields(fdtd::FDTD* fdtd);
         void FDTD_capture_t1_fields(fdtd::FDTD* fdtd);
-        void FDTD_calc_complex_fields_2T(fdtd::FDTD* fdtd, double t0, double t1);
         void FDTD_calc_complex_fields_3T(fdtd::FDTD* fdtd, double t0, double t1, double t2);
 
         // Source management

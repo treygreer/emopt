@@ -1124,99 +1124,7 @@ void fdtd::FDTD::capture_t1_fields()
 
 }
 
-void fdtd::FDTD::calc_complex_fields(double t0, double t1)
-{
-    double f0, f1, phi, A, t0H, t1H;
-    int ind_ijk;
-
-    t0H = t0 - 0.5*_hcd.dt;
-    t1H = t1 - 0.5*_hcd.dt;
-
-    for(int i = 0; i < _Nz; i++) {
-        for(int j = 0; j < _Ny; j++) {
-            for(int k = 0; k < _Nx; k++) {
-                ind_ijk = (i)*(_Ny)*(_Nx) + (j)*(_Nx) + k;
-
-                // Compute amplitude and phase for Ex
-                // Note: we are careful to assume exp(-i*w*t) time dependence
-                f0 = _Ex_t0[ind_ijk].real;
-                f1 = _hcd.Ex[ind_ijk];
-                phi = calc_phase(t0, t1, f0, f1);
-                A = calc_amplitude(t0, t1, f0, f1, phi);
-                if(A < 0) {
-                    A *= -1;
-                    phi += M_PI;
-                }
-                _Ex_t0[ind_ijk].real = A*cos(phi);
-                _Ex_t0[ind_ijk].imag = -A*sin(phi);
-
-                // Ey
-                f0 = _Ey_t0[ind_ijk].real;
-                f1 = _hcd.Ey[ind_ijk];
-                phi = calc_phase(t0, t1, f0, f1);
-                A = calc_amplitude(t0, t1, f0, f1, phi);
-                if(A < 0) {
-                    A *= -1;
-                    phi += M_PI;
-                }
-                _Ey_t0[ind_ijk].real = A*cos(phi);
-                _Ey_t0[ind_ijk].imag = -A*sin(phi);
-
-                // Ez
-                f0 = _Ez_t0[ind_ijk].real;
-                f1 = _hcd.Ez[ind_ijk];
-                phi = calc_phase(t0, t1, f0, f1);
-                A = calc_amplitude(t0, t1, f0, f1, phi);
-                if(A < 0) {
-                    A *= -1;
-                    phi += M_PI;
-                }
-                _Ez_t0[ind_ijk].real = A*cos(phi);
-                _Ez_t0[ind_ijk].imag = -A*sin(phi);
-
-                // Hx
-                f0 = _Hx_t0[ind_ijk].real;
-                f1 = _hcd.Hx[ind_ijk];
-                phi = calc_phase(t0H, t1H, f0, f1);
-                A = calc_amplitude(t0H, t1H, f0, f1, phi);
-                if(A < 0) {
-                    A *= -1;
-                    phi += M_PI;
-                }
-                _Hx_t0[ind_ijk].real = A*cos(phi);
-                _Hx_t0[ind_ijk].imag = -A*sin(phi);
-
-                // Hy
-                f0 = _Hy_t0[ind_ijk].real;
-                f1 = _hcd.Hy[ind_ijk];
-                phi = calc_phase(t0H, t1H, f0, f1);
-                A = calc_amplitude(t0H, t1H, f0, f1, phi);
-                if(A < 0) {
-                    A *= -1;
-                    phi += M_PI;
-                }
-                _Hy_t0[ind_ijk].real = A*cos(phi);
-                _Hy_t0[ind_ijk].imag = -A*sin(phi);
-
-                // Hz
-                f0 = _Hz_t0[ind_ijk].real;
-                f1 = _hcd.Hz[ind_ijk];
-                phi = calc_phase(t0H, t1H, f0, f1);
-                A = calc_amplitude(t0H, t1H, f0, f1, phi);
-                if(A < 0) {
-                    A *= -1;
-                    phi += M_PI;
-                }
-                _Hz_t0[ind_ijk].real = A*cos(phi);
-                _Hz_t0[ind_ijk].imag = -A*sin(phi);
-            }
-        }
-    }
-
-}
-
-
-void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
+void fdtd::FDTD::calc_complex_fields_3T(double t0, double t1, double t2)
 {
     double f0, f1, f2, phi, A, t0H, t1H, t2H;
     int ind_ijk;
@@ -1235,8 +1143,8 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                 f0 = _Ex_t0[ind_ijk].real;
                 f1 = _Ex_t1[ind_ijk].real;
                 f2 = _hcd.Ex[ind_ijk];
-                phi = calc_phase(t0, t1, t2, f0, f1, f2);
-                A = calc_amplitude(t0, t1, t2, f0, f1, f2, phi);
+                phi = calc_phase_3T(t0, t1, t2, f0, f1, f2);
+                A = calc_amplitude_3T(t0, t1, t2, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
@@ -1248,8 +1156,8 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                 f0 = _Ey_t0[ind_ijk].real;
                 f1 = _Ey_t1[ind_ijk].real;
                 f2 = _hcd.Ey[ind_ijk];
-                phi = calc_phase(t0, t1, t2, f0, f1, f2);
-                A = calc_amplitude(t0, t1, t2, f0, f1, f2, phi);
+                phi = calc_phase_3T(t0, t1, t2, f0, f1, f2);
+                A = calc_amplitude_3T(t0, t1, t2, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
@@ -1261,8 +1169,8 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                 f0 = _Ez_t0[ind_ijk].real;
                 f1 = _Ez_t1[ind_ijk].real;
                 f2 = _hcd.Ez[ind_ijk];
-                phi = calc_phase(t0, t1, t2, f0, f1, f2);
-                A = calc_amplitude(t0, t1, t2, f0, f1, f2, phi);
+                phi = calc_phase_3T(t0, t1, t2, f0, f1, f2);
+                A = calc_amplitude_3T(t0, t1, t2, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
@@ -1274,8 +1182,8 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                 f0 = _Hx_t0[ind_ijk].real;
                 f1 = _Hx_t1[ind_ijk].real;
                 f2 = _hcd.Hx[ind_ijk];
-                phi = calc_phase(t0H, t1H, t2H, f0, f1, f2);
-                A = calc_amplitude(t0H, t1H, t2H, f0, f1, f2, phi);
+                phi = calc_phase_3T(t0H, t1H, t2H, f0, f1, f2);
+                A = calc_amplitude_3T(t0H, t1H, t2H, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
@@ -1287,8 +1195,8 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                 f0 = _Hy_t0[ind_ijk].real;
                 f1 = _Hy_t1[ind_ijk].real;
                 f2 = _hcd.Hy[ind_ijk];
-                phi = calc_phase(t0H, t1H, t2H, f0, f1, f2);
-                A = calc_amplitude(t0H, t1H, t2H, f0, f1, f2, phi);
+                phi = calc_phase_3T(t0H, t1H, t2H, f0, f1, f2);
+                A = calc_amplitude_3T(t0H, t1H, t2H, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
@@ -1300,8 +1208,8 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
                 f0 = _Hz_t0[ind_ijk].real;
                 f1 = _Hz_t1[ind_ijk].real;
                 f2 = _hcd.Hz[ind_ijk];
-                phi = calc_phase(t0H, t1H, t2H, f0, f1, f2);
-                A = calc_amplitude(t0H, t1H, t2H, f0, f1, f2, phi);
+                phi = calc_phase_3T(t0H, t1H, t2H, f0, f1, f2);
+                A = calc_amplitude_3T(t0H, t1H, t2H, f0, f1, f2, phi);
                 if(A < 0) {
                     A *= -1;
                     phi += M_PI;
@@ -1314,27 +1222,7 @@ void fdtd::FDTD::calc_complex_fields(double t0, double t1, double t2)
     }
 }
 
-inline double fdtd::calc_phase(double t0, double t1, double f0, double f1)
-{
-    if(f0 == 0.0 and f1 == 0) {
-        return 0.0;
-    }
-    else {
-        return atan((f1*sin(t0)-f0*sin(t1))/(f0*cos(t1)-f1*cos(t0)));
-    }
-}
-
-inline double fdtd::calc_amplitude(double t0, double t1, double f0, double f1, double phase)
-{
-    if(f0*f0 > f1*f1) {
-        return f1 / (sin(t1)*cos(phase) + cos(t1)*sin(phase));
-    }
-    else {
-        return f0 / (sin(t0)*cos(phase) + cos(t0)*sin(phase));
-    }
-}
-
-inline double fdtd::calc_phase(double t0, double t1, double t2, double f0, double f1, double f2)
+inline double fdtd::calc_phase_3T(double t0, double t1, double t2, double f0, double f1, double f2)
 {
     double f10 = f1 - f0,
            f21 = f2 - f1;
@@ -1348,7 +1236,8 @@ inline double fdtd::calc_phase(double t0, double t1, double t2, double f0, doubl
     }
 }
 
-inline double fdtd::calc_amplitude(double t0, double t1, double t2, double f0, double f1, double f2, double phase)
+inline double fdtd::calc_amplitude_3T(double t0, double t1, double t2,
+									  double f0, double f1, double f2, double phase)
 {
     double f21 = f2 - f1,
            f10 = f1 - f0;
@@ -1581,24 +1470,14 @@ void FDTD_set_t1_arrays(fdtd::FDTD* fdtd,
     fdtd->set_t1_arrays(Ex_t1, Ey_t1, Ez_t1, Hx_t1, Hy_t1, Hz_t1);
 }
 
-double FDTD_calc_phase_2T(double t0, double t1, double f0, double f1)
-{
-    return fdtd::calc_phase(t0, t1, f0, f1);
-}
-
-double FDTD_calc_amplitude_2T(double t0, double t1, double f0, double f1, double phase)
-{
-    return fdtd::calc_amplitude(t0, t1, f0, f1, phase);
-}
-
 double FDTD_calc_phase_3T(double t0, double t1, double t2, double f0, double f1, double f2)
 {
-    return fdtd::calc_phase(t0, t1, t2, f0, f1, f2);
+    return fdtd::calc_phase_3T(t0, t1, t2, f0, f1, f2);
 }
 
 double FDTD_calc_amplitude_3T(double t0, double t1, double t2, double f0, double f1, double f2, double phase)
 {
-    return fdtd::calc_amplitude(t0, t1, t2, f0, f1, f2, phase);
+    return fdtd::calc_amplitude_3T(t0, t1, t2, f0, f1, f2, phase);
 }
 
 void FDTD_capture_t0_fields(fdtd::FDTD* fdtd)
@@ -1611,15 +1490,9 @@ void FDTD_capture_t1_fields(fdtd::FDTD* fdtd)
     fdtd->capture_t1_fields();
 }
 
-
-void FDTD_calc_complex_fields_2T(fdtd::FDTD* fdtd, double t0, double t1)
-{
-    fdtd->calc_complex_fields(t0, t1);
-}
-
 void FDTD_calc_complex_fields_3T(fdtd::FDTD* fdtd, double t0, double t1, double t2)
 {
-    fdtd->calc_complex_fields(t0, t1, t2);
+    fdtd->calc_complex_fields_3T(t0, t1, t2);
 }
 
 void FDTD_add_source(fdtd::FDTD* fdtd,

@@ -751,7 +751,7 @@ class FDTD(MaxwellSolver):
         self._adj_sources = []
 
     def build(self):
-        """Assemble the strcutre.
+        """Assemble the stucture.
 
         This involves computing the permittiviy and permeability distribution
         for the simulation.
@@ -800,11 +800,6 @@ class FDTD(MaxwellSolver):
         indices. In the future, the other solvers will implement this same
         functionality.
 
-        TODO
-        ----
-        Implement 3 point frequency domain calculation. This should be
-        more accurate and produce more consistent results.
-
         Parameters
         ----------
         bbox : list of floats (optional)
@@ -836,7 +831,7 @@ class FDTD(MaxwellSolver):
 
             # update eps_x
             eps_x = self._eps_x
-            eps_x = np.reshape(eps_x, [Nz,Ny,Nx])
+            eps_x = np.reshape(eps_x, [self._Nz,self._Ny,self._Nx])
             eps.get_values(g_inds[2], g_inds[2]+sizes[2],
                            g_inds[1], g_inds[1]+sizes[1],
                            g_inds[0], g_inds[0]+sizes[0],
@@ -846,7 +841,7 @@ class FDTD(MaxwellSolver):
 
             # update eps_y
             eps_y = self._eps_y
-            eps_y = np.reshape(eps_y, [Nz,Ny,Nx])
+            eps_y = np.reshape(eps_y, [self._Nz,self._Ny,self._Nx])
             eps.get_values(g_inds[2], g_inds[2]+sizes[2],
                            g_inds[1], g_inds[1]+sizes[1],
                            g_inds[0], g_inds[0]+sizes[0],
@@ -856,7 +851,7 @@ class FDTD(MaxwellSolver):
 
             # update eps_z
             eps_z = self._eps_z
-            eps_z = np.reshape(eps_z, [Nz,Ny,Nx])
+            eps_z = np.reshape(eps_z, [self._Nz,self._Ny,self._Nx])
             eps.get_values(g_inds[2], g_inds[2]+sizes[2],
                            g_inds[1], g_inds[1]+sizes[1],
                            g_inds[0], g_inds[0]+sizes[0],
@@ -866,7 +861,7 @@ class FDTD(MaxwellSolver):
 
             # update mu_x
             mu_x = self._mu_x
-            mu_x = np.reshape(mu_x, [Nz,Ny,Nx])
+            mu_x = np.reshape(mu_x, [self._Nz,self._Ny,self._Nx])
             mu.get_values(g_inds[2], g_inds[2]+sizes[2],
                           g_inds[1], g_inds[1]+sizes[1],
                           g_inds[0], g_inds[0]+sizes[0],
@@ -876,7 +871,7 @@ class FDTD(MaxwellSolver):
 
             # update mu_y
             mu_y = self._mu_y
-            mu_y = np.reshape(mu_y, [Nz,Ny,Nx])
+            mu_y = np.reshape(mu_y, [self._Nz,self._Ny,self._Nx])
             mu.get_values(g_inds[2], g_inds[2]+sizes[2],
                           g_inds[1], g_inds[1]+sizes[1],
                           g_inds[0], g_inds[0]+sizes[0],
@@ -886,7 +881,7 @@ class FDTD(MaxwellSolver):
 
             # update mu_z
             mu_z = self._mu_z
-            mu_z = np.reshape(mu_z, [Nz,Ny,Nx])
+            mu_z = np.reshape(mu_z, [self._Nz,self._Ny,self._Nx])
             mu.get_values(g_inds[2], g_inds[2]+sizes[2],
                           g_inds[1], g_inds[1]+sizes[1],
                           g_inds[0], g_inds[0]+sizes[0],
@@ -997,15 +992,15 @@ class FDTD(MaxwellSolver):
                 # start with Ex
                 Ex0[q] = Ex1[q]
                 Ex1[q] = Ex2[q]
-                Ex2[q] = np.real(self._Ex[conv_index])
+                Ex2[q] = self._Ex[conv_index]
 
                 Ey0[q] = Ey1[q]
                 Ey1[q] = Ey2[q]
-                Ey2[q] = np.real(self._Ey[conv_index])
+                Ey2[q] = self._Ey[conv_index]
 
                 Ez0[q] = Ez1[q]
                 Ez1[q] = Ez2[q]
-                Ez2[q] = np.real(self._Ez[conv_index])
+                Ez2[q] = self._Ez[conv_index]
 
                 phasex = libFDTD.FDTD_calc_phase_3T(t0, t1, t2,
                                                     Ex0[q], Ex1[q], Ex2[q])
@@ -1046,7 +1041,7 @@ class FDTD(MaxwellSolver):
         t0 = n*dt
         libFDTD.FDTD_capture_t0_fields(self._libfdtd)
 
-        # perform a couple more iterations to get a second time point
+        # perform a couple more iterations to get two more time points
         libFDTD.FDTD_update(self._libfdtd, n*dt, Tn)
         n += Tn
         t1 = n*dt

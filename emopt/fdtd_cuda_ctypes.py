@@ -81,16 +81,9 @@ libFDTD.FDTD_set_t1_arrays.argtypes = [c_void_p,
                                        c_complex_p, c_complex_p, c_complex_p]
 libFDTD.FDTD_set_t1_arrays.restype = None
 
-libFDTD.FDTD_calc_phase_2T.argtypes = [c_double, c_double, c_double, c_double]
-libFDTD.FDTD_calc_phase_2T.restype = c_double
-
 libFDTD.FDTD_calc_phase_3T.argtypes = [c_double, c_double, c_double,
                                        c_double, c_double, c_double]
 libFDTD.FDTD_calc_phase_3T.restype = c_double
-
-libFDTD.FDTD_calc_amplitude_2T.argtypes = [c_double, c_double, c_double,
-                                           c_double, c_double]
-libFDTD.FDTD_calc_amplitude_2T.restype = c_double
 
 libFDTD.FDTD_calc_amplitude_3T.argtypes = [c_double, c_double, c_double,
                                            c_double, c_double, c_double,
@@ -102,9 +95,6 @@ libFDTD.FDTD_capture_t0_fields.restype = None
 
 libFDTD.FDTD_capture_t1_fields.argtypes = [c_void_p]
 libFDTD.FDTD_capture_t1_fields.restype = None
-
-libFDTD.FDTD_calc_complex_fields_2T.argtypes = [c_void_p, c_double, c_double]
-libFDTD.FDTD_calc_complex_fields_2T.restype = None
 
 libFDTD.FDTD_calc_complex_fields_3T.argtypes = [c_void_p, c_double, c_double,
                                                 c_double]
