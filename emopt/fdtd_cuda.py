@@ -290,12 +290,12 @@ class FDTD(MaxwellSolver):
         self._Hy_adj_t1 = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
         self._Hz_adj_t1 = np.zeros((Nx * Ny * Nz,), dtype=np.complex128)
 
-        print(f'global shape = {self._Hz_adj_t1.shape}')
-
         # setup the C library which takes care of the E and H updates
         # Nothing complicated here -- just passing all of the sim parameters
         # and work vectors over to the c library
         self._libfdtd = libFDTD.FDTD_new(Nx, Ny, Nz)
+        if not self._libfdtd:
+            raise MemoryError("Cuda memory allocation")
         # field arrays
         self._Ex = np.ctypeslib.as_array(self._libfdtd.contents.Ex, shape=(Nz*Ny*Nx,))
         self._Ey = np.ctypeslib.as_array(self._libfdtd.contents.Ey, shape=(Nz*Ny*Nx,))
@@ -1102,7 +1102,6 @@ class FDTD(MaxwellSolver):
                                     src.I, src.J, src.K,
                                     False)
 
-        print("solving...")
         self.__solve()
 
         self.update_saved_fields()
@@ -1204,7 +1203,7 @@ class FDTD(MaxwellSolver):
             if(adjoint): field = self._Hz_adj_t0
             else: field = self._Hz_fwd_t0
 
-        fout = field.copy().reshape(self._Nz, self._Ny, self._Nx)
+        fout = field.copy().reshape(self._Nz, self._Ny, self._Nx)  # FIXME: Why copy()???
         return fout[domain.i, domain.j, domain.k]
 
     def get_field(self, component, domain=None):
@@ -1431,7 +1430,6 @@ class FDTD(MaxwellSolver):
         if(self._w_pml[5] > 0): zmax = self._Z - self._w_pml[5]-dz
         else: zmax = self._Z - self._dz
 
-        print(f'mins={xmin,ymin,zmin}, maxs={xmax,ymax,zmax}, ds={dx,dy,dz}')
         x1 = DomainCoordinates(xmin, xmin, ymin, ymax, zmin, zmax, dx, dy, dz)
         x2 = DomainCoordinates(xmax, xmax, ymin, ymax, zmin, zmax, dx, dy, dz)
         y1 = DomainCoordinates(xmin, xmax, ymin, ymin, zmin, zmax, dx, dy, dz)
@@ -1445,10 +1443,6 @@ class FDTD(MaxwellSolver):
         Hy = self.get_field_interp('Hy', x1)
         Hz = self.get_field_interp('Hz', x1)
 
-        print(f'_bc = {self._bc}')
-        print(f'x1 shape = {x1.shape}')
-        print(x1._Nx, x1._Ny, x1._Nz)
-        print(f'Eyz shapes = ({Ey.shape,Ez.shape}), Hyz shapes = ({Hy.shape,Hz.shape})')
         if(self._bc[0] != 'E' and self._bc[0] != 'H'):
             Px = -0.5*dy*dz*np.sum(np.real(Ey*np.conj(Hz)-Ez*np.conj(Hy)))
             #print Px
