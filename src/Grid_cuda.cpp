@@ -8,42 +8,6 @@
 using namespace Grid;
 
 /**************************************** Materials ****************************************/
-//------------------------------ Grid Material ------------------------------------/
-GridMaterial2D::GridMaterial2D(int M, int N, ArrayXXcd grid) : _M(M), _N(N), _grid(grid) {}
-
-std::complex<double> GridMaterial2D::get_value(double x, double y)
-{
-    int xx = int(x),
-        yy = int(y);
-
-	if(xx > 0 && xx < _M && yy > 0 && yy < _N) 
-		return _grid(yy,xx);
-	else
-		return 1.0;
-}
-
-
-void GridMaterial2D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, double sx, double sy)
-{
-    int N = k2 - k1;
-
-    for(int i = j1; i < j2; i++) {
-        for(int j = k1; j < k2; j++) {
-            grid((i-j1)*N + j-k1) = _grid(i,j);
-        }
-    }
-}
-
-void GridMaterial2D::set_grid(int M, int N, ArrayXXcd grid)
-{
-	_M = M;
-	_N = N;
-	_grid = grid;
-}
-
-int GridMaterial2D::get_M() { return _M; }
-int GridMaterial2D::get_N() { return _N; }
-
 
 //------------------------------ MaterialPrimitives ------------------------------------/
 GridCell::GridCell()

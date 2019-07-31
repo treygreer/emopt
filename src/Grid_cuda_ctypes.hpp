@@ -16,19 +16,10 @@ extern "C" {
     ////////////////////////////////////////////////////////////////////////////////
 	// Material2D
 	////////////////////////////////////////////////////////////////////////////////
-	void Material2D_get_value(Material2D* mat, complex64* val, double x, double y);
+	//void Material2D_get_value(Material2D* mat, complex64* val, double x, double y);
 
     void Material2D_get_values(Material2D* mat, complex64* arr, int k1, int k2, int j1,
                                int j2, double sx, double sy);
-
-	////////////////////////////////////////////////////////////////////////////////
-	// GridMaterial2D
-	////////////////////////////////////////////////////////////////////////////////
-	GridMaterial2D* GridMaterial2D_new(int M, int N, complex64* arr); 
-	void GridMaterial2D_delete(GridMaterial2D* mat);
-	void GridMaterial2D_set_grid(GridMaterial2D* mat, int M, int N, complex64* arr);
-	int GridMaterial2D_get_M(GridMaterial2D* mat);
-	int GridMaterial2D_get_N(GridMaterial2D* mat);
 
 	////////////////////////////////////////////////////////////////////////////////
 	// StructuredMaterial2D
@@ -113,10 +104,6 @@ extern "C" {
 	void StructuredMaterial3D_delete(StructuredMaterial3D* sm);
 	void StructuredMaterial3D_add_primitive(StructuredMaterial3D* sm, MaterialPrimitive* prim, double z1, double z2);
 
-    ////////////////////////////////////////////////////////////////////////////////
-    // Misc
-    ////////////////////////////////////////////////////////////////////////////////
-    void row_wise_A_update(Material2D* eps, Material2D* mu, int ib, int ie, int M, int N, int x1, int x2, int y1, int y2, complex64* vdiag);
 }
 
 #endif

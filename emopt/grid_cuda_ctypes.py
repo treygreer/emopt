@@ -24,25 +24,11 @@ c_double_p = ndpointer(np.double, ndim=1, flags='C')
 #####################################################################################
 # Material2D configuration 
 #####################################################################################
-libGrid.Material2D_get_value.argtypes = [c_void_p, c_complex_1D_p, c_double, c_double]
-libGrid.Material2D_get_value.restype = None
+#libGrid.Material2D_get_value.argtypes = [c_void_p, c_complex_1D_p, c_double, c_double]
+#libGrid.Material2D_get_value.restype = None
 libGrid.Material2D_get_values.argtypes = [c_void_p, c_complex_1D_p, c_int, c_int, c_int,
                                           c_int, c_double, c_double]
 libGrid.Material2D_get_values.restype = None
-
-####################################################################################
-# GridMaterial2D configuration
-####################################################################################
-libGrid.GridMaterial2D_new.argtypes = [c_int, c_int, c_complex_2D_p]
-libGrid.GridMaterial2D_new.restype = c_void_p
-libGrid.GridMaterial2D_delete.argtypes = [c_void_p]
-libGrid.GridMaterial2D_delete.restype = None
-libGrid.GridMaterial2D_set_grid.argtypes = [c_void_p, c_int, c_int, c_complex_2D_p]
-libGrid.GridMaterial2D_set_grid.restype = None
-libGrid.GridMaterial2D_get_M.argtypes = [c_void_p]
-libGrid.GridMaterial2D_get_M.restype = c_int
-libGrid.GridMaterial2D_get_N.argtypes = [c_void_p]
-libGrid.GridMaterial2D_get_N.restype = c_int
 
 ####################################################################################
 # StructuredMaterial2D configuration
@@ -169,12 +155,5 @@ libGrid.StructuredMaterial3D_delete.restype = None
 libGrid.StructuredMaterial3D_add_primitive.argtypes = [c_void_p, c_void_p,
                                                        c_double, c_double]
 libGrid.StructuredMaterial3D_add_primitive.restype = None
-
-####################################################################################
-# Misc
-####################################################################################
-libGrid.row_wise_A_update.argtypes = [c_void_p, c_void_p, c_int, c_int, c_int, c_int, \
-                                      c_int, c_int, c_int, c_int, c_complex_1D_p]
-libGrid.row_wise_A_update.restype = None
 
 

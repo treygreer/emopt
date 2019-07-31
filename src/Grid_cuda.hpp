@@ -19,9 +19,10 @@
 // encountered where quad-precision is required (this is why CGAL 
 // supports arbitrary precision).  To be safe, we generally use quad-
 // precision.
-#define GFLOAT __float128
+//#define GFLOAT __float128
+//#define GFLOAT double
 
-typedef boost::geometry::model::d2::point_xy<GFLOAT> Point_2D;
+typedef boost::geometry::model::d2::point_xy<double> Point_2D;
 typedef boost::geometry::model::polygon<Point_2D> Polygon_2D;
 typedef boost::geometry::model::box<Point_2D> BBox;
 using namespace Eigen;
@@ -46,7 +47,7 @@ class Material2D {
 			 * The structure of the electromagnetic system being solved is ultimately defined
 			 * in terms of spatially-dependent materials. The material is defined on a 
 			 * spatial grid which is directly compatible with finite differences.
-			 * See <GridMaterial> and <StructuredMaterial> for specific implementations.
+			 * See <StructuredMaterial> for specific implementations.
 			 *
 			 * @return the complex material at position (x,y).
 			 */
@@ -58,57 +59,6 @@ class Material2D {
 			virtual ~Material2D() {};
 };
 
-/* Simple array-based implementation of a <Material>
- *
- * A GridMaterial is a material which is explicitly defined on a grid (2D array).  The complex
- * material is explicitly defined at each point in a NxM grid.
- */
-class GridMaterial2D : public Material2D {
-	
-		private:
-
-			int _M, _N;
-			ArrayXXcd _grid;
-
-		public:
-			/* Create a new GridMaterial2D.
-			 * @M the number of columns in the array (system width)
-			 * @N the number of rows in the array (system height)
-			 * @grid an array containing complex material values defined at each point in space
-			 */
-			GridMaterial2D(int M, int N, ArrayXXcd grid);
-			
-			/* GridMaterial2D destructor
-			 */
-			~GridMaterial2D(){};
-
-			/* Get the material value at index (x,y).
-			 * @x the x index (column) of the material value
-			 * @y the y index (row) of the material value
-			 *
-			 * @return the complex material value at (x,y)
-			 */
-			std::complex<double> get_value(double x, double y);
-            void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, double sx, double sy);
-
-			/* Assign a new grid as the <Material>
-			 * @M the number of columns in the array (width)
-			 * @N the number of rows in the array (height)
-			 * @grid an array containing complex material values defined at each point in space
-			 */
-			void set_grid(int M, int N, ArrayXXcd grid);
-
-			/* Get the number of grid columns (width).
-			 * @return the number of grid columns (material width).
-			 */
-			int get_M();
-
-			/* Get the number of grid rows (height)
-			 * @return the number of grid rows (material height)
-			 */
-			int get_N();
-
-};
 
 /* A polygon which defines the boundary of an entire Yee cell or an arbitrary portion of a Yee cell.
  *
@@ -541,7 +491,7 @@ class Material3D {
 			 * The structure of the electromagnetic system being solved is ultimately defined
 			 * in terms of spatially-dependent materials. The material is defined on a 
 			 * spatial grid which is directly compatible with finite differences.
-			 * See <GridMaterial> and <StructuredMaterial> for specific implementations.
+			 * See <StructuredMaterial> for specific implementations.
 			 *
 			 * @return the complex material at position (x,y).
 			 */
@@ -606,7 +556,6 @@ class ConstantMaterial3D : public Material3D {
  */
 class StructuredMaterial3D : public Material3D {
 	private:
-		std::list<MaterialPrimitive*> _primitives;
         std::list<StructuredMaterial2D*> _layers;
         std::list<double> _zs;
 

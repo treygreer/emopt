@@ -74,10 +74,11 @@ class Material2D(object):
         complex128
             The complex material value at the desired location.
         """
-        value = np.array([0], dtype=np.complex128)
-        libGrid.Material2D_get_value(self._object, value, x, y)
+        raise NotImplementedError;
+        #value = np.array([0], dtype=np.complex128)
+        #libGrid.Material2D_get_value(self._object, value, x, y)
 
-        return value
+        #return value
 
     def get_values(self, k1, k2, j1, j2, sx=0.0, sy=0.0, arr=None):
         """Get the values of the material distribution within a set of array
