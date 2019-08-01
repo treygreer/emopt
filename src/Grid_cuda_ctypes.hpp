@@ -14,21 +14,6 @@ typedef struct struct_complex64 {
 extern "C" {
 
     ////////////////////////////////////////////////////////////////////////////////
-	// Material2D
-	////////////////////////////////////////////////////////////////////////////////
-	//void Material2D_get_value(Material2D* mat, complex64* val, double x, double y);
-
-    void Material2D_get_values(Material2D* mat, complex64* arr, int k1, int k2, int j1,
-                               int j2, double sx, double sy);
-
-	////////////////////////////////////////////////////////////////////////////////
-	// StructuredMaterial2D
-	////////////////////////////////////////////////////////////////////////////////
-	StructuredMaterial2D* StructuredMaterial2D_new(double w, double h, double dx, double dy);
-	void StructuredMaterial2D_delete(StructuredMaterial2D* sm);
-	void StructuredMaterial2D_add_primitive(StructuredMaterial2D* sm, MaterialPrimitive* prim);
-
-    ////////////////////////////////////////////////////////////////////////////////
 	// MaterialPrimitive
 	////////////////////////////////////////////////////////////////////////////////
 	void MaterialPrimitive_set_layer(MaterialPrimitive* prim, int layer);
@@ -37,29 +22,6 @@ extern "C" {
 	double MaterialPrimitive_get_material_real(MaterialPrimitive* prim, double x, double y);
 	double MaterialPrimitive_get_material_imag(MaterialPrimitive* prim, double x, double y);
 
-	////////////////////////////////////////////////////////////////////////////////
-	// Circle
-	////////////////////////////////////////////////////////////////////////////////
-	Circle* Circle_new(double x0, double y0, double r);
-	void Circle_delete(Circle* c);
-	void Circle_set_material(Circle* c, double real, double imag);
-	void Circle_set_position(Circle* c, double x0, double y0);
-	void Circle_set_radius(Circle* c, double r);
-	double Circle_get_x0(Circle* c);
-	double Circle_get_y0(Circle* c);
-	double Circle_get_r(Circle* c);
-
-	////////////////////////////////////////////////////////////////////////////////
-	// Rectangle
-	////////////////////////////////////////////////////////////////////////////////
-	Rectangle* Rectangle_new(double x0, double y0, double xspan, double yspan);
-	void Rectangle_delete(Rectangle* r);
-	void Rectangle_set_material(Rectangle* r, double real, double imag);
-	void Rectangle_set_position(Rectangle* r, double x0, double y0);
-	void Rectangle_set_width(Rectangle* r, double width);
-	void Rectangle_set_height(Rectangle* r, double height);
-
-	
 	////////////////////////////////////////////////////////////////////////////////
 	// Polygon
 	////////////////////////////////////////////////////////////////////////////////
@@ -70,14 +32,6 @@ extern "C" {
 	void Polygon_set_point(Polygon* poly, double x, double y, int index);
 	void Polygon_set_points(Polygon* poly, double* x, double* y, int n);
 	void Polygon_set_material(Polygon* poly, double real, double imag);
-
-	////////////////////////////////////////////////////////////////////////////////
-	// ConstantMaterial2D
-	////////////////////////////////////////////////////////////////////////////////
-    ConstantMaterial2D* ConstantMaterial2D_new(double real, double imag);
-    void ConstantMaterial2D_set_material(ConstantMaterial2D* cm, double real, double imag);
-	double ConstantMaterial2D_get_material_real(ConstantMaterial2D* cm);
-	double ConstantMaterial2D_get_material_imag(ConstantMaterial2D* cm);
 
     ////////////////////////////////////////////////////////////////////////////////
 	// Material3D

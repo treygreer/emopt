@@ -102,158 +102,6 @@ bool MaterialPrimitive::operator<(const MaterialPrimitive& rhs)
 	return _layer < rhs.get_layer();
 }
 
-Circle::Circle(double x0, double y0, double r) : _x0(x0), _y0(y0), _r(r) {}
-Circle::~Circle() {}
-
-bool Circle::contains_point(double x, double y)
-{
-	double dx = x - _x0,
-		   dy = y - _y0;
-	return dx*dx + dy*dy < _r*_r;
-}
-
-
-bool Circle::bbox_contains_point(double x, double y)
-{
-	double xmin = _x0-_r,
-		   xmax = _x0+_r,
-		   ymin = _y0-_r,
-		   ymax = _y0+_r;
-
-	return (x > xmin) && (x < xmax) && (y > ymin) && (y < ymax);
-}
-
-std::complex<double> Circle::get_material(double x, double y)
-{
-	return _mat;
-}
-
-// TODO: Implement this properly
-double Circle::get_cell_overlap(GridCell& cell)
-{
-	return 0.0;
-}	
-
-void Circle::set_material(std::complex<double> mat)
-{
-	_mat = mat;
-}
-
-void Circle::set_position(double x0, double y0)
-{
-	_x0 = x0;
-	_y0 = y0;
-}
-
-void Circle::set_radius(double r)
-{
-	_r = r;
-}
-
-double Circle::get_x0()
-{
-	return _x0;
-}
-
-double Circle::get_y0()
-{
-	return _y0;
-}
-
-double Circle::get_r()
-{
-	return _r;
-}
-
-Rectangle::Rectangle(double x0, double y0, double width, double height) : 
-		_x0(x0), _y0(y0), _width(width), _height(height)
-{
-    // Points must be defined clockwise and the polygon must be closed
-    boost::geometry::append(_poly_rep, Point_2D(x0-width/2.0, y0-height/2.0));
-    boost::geometry::append(_poly_rep, Point_2D(x0-width/2.0, y0+height/2.0));
-    boost::geometry::append(_poly_rep, Point_2D(x0+width/2.0, y0+height/2.0));
-    boost::geometry::append(_poly_rep, Point_2D(x0+width/2.0, y0-height/2.0));
-    boost::geometry::append(_poly_rep, Point_2D(x0-width/2.0, y0-height/2.0));
-}
-
-Rectangle::~Rectangle()
-{
-}
-
-bool Rectangle::contains_point(double x, double y)
-{
-	double hwidth = _width/2,
-		   hheight = _height/2;
-
-	return (x > _x0-hwidth) && (x < _x0+hwidth) && (y > _y0-hheight) && (y < _y0+hheight);
-}
-
-
-bool Rectangle::bbox_contains_point(double x, double y)
-{
-	return contains_point(x,y);
-}
-
-std::complex<double> Rectangle::get_material(double x, double y)
-{
-	return _mat;
-}
-
-double Rectangle::get_cell_overlap(GridCell& cell)
-{
-	return cell.intersect(_poly_rep);
-}
-
-void Rectangle::set_material(std::complex<double> mat)
-{
-	_mat = mat;
-}
-
-void Rectangle::set_width(double w)
-{
-	_width = w;
-
-
-    std::vector<Point_2D>& outer = _poly_rep.outer();
-    outer[0].x(_x0-_width/2.0);
-    outer[1].x(_x0-_width/2.0);
-    outer[2].x(_x0+_width/2.0);
-    outer[3].x(_x0+_width/2.0);
-    outer[4].x(_x0-_width/2.0);
-}
-
-void Rectangle::set_height(double h)
-{
-	_height = h;
-
-    std::vector<Point_2D>& outer = _poly_rep.outer();
-    outer[0].y(_y0-_height/2.0);
-    outer[1].y(_y0+_height/2.0);
-    outer[2].y(_y0+_height/2.0);
-    outer[3].y(_y0-_height/2.0);
-    outer[4].y(_y0-_height/2.0);
-}
-
-void Rectangle::set_position(double x0, double y0)
-{
-	_x0 = x0;
-	_y0 = y0;
-
-    std::vector<Point_2D>& outer = _poly_rep.outer();
-    outer[0].x(_x0-_width/2.0);
-    outer[1].x(_x0-_width/2.0);
-    outer[2].x(_x0+_width/2.0);
-    outer[3].x(_x0+_width/2.0);
-    outer[4].x(_x0-_width/2.0);
-
-    outer[0].y(_y0-_height/2.0);
-    outer[1].y(_y0+_height/2.0);
-    outer[2].y(_y0+_height/2.0);
-    outer[3].y(_y0-_height/2.0);
-    outer[4].y(_y0-_height/2.0);
-
-}
-
 
 //------------------------------ Polygon ------------------------------------/
 
@@ -488,39 +336,6 @@ std::list<MaterialPrimitive*> StructuredMaterial2D::get_primitives()
     return _primitives;
 }
 
-////////////////////////////////////////////////////////////////////////////////////
-// ConstantMaterial2D
-////////////////////////////////////////////////////////////////////////////////////
-ConstantMaterial2D::ConstantMaterial2D(std::complex<double> value)
-{
-    _value = value;
-}
-
-std::complex<double> ConstantMaterial2D::get_value(double x, double y)
-{
-    return _value;
-}
-
-void ConstantMaterial2D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, double sx, double sy)
-{
-    int N = k2 - k1;
-
-    for(int i = j1; i < j2; i++) {
-        for(int j = k1; j < k2; j++) {
-            grid((i-j1)*N + j-k1) = _value;
-        }
-    }
-}
-
-void ConstantMaterial2D::set_material(std::complex<double> val)
-{
-    _value = val;
-}
-
-std::complex<double> ConstantMaterial2D::get_material()
-{
-    return _value;
-}
 
 ////////////////////////////////////////////////////////////////////////////////////
 // ConstantMaterial3D
@@ -572,7 +387,6 @@ StructuredMaterial3D::StructuredMaterial3D(double X, double Y, double Z,
     _background = 1.0;
     _use_cache = true;
     _cache_active = false;
-	printf("*********************************** Hello, world *************************************\n");
 }
 
 // We allocate memory -- Need to free it!

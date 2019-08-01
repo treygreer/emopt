@@ -31,33 +31,6 @@ typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
 
 namespace Grid {
 
-/* Material class which provides the foundation for defining the system materials/structure.
- *
- * A Material must satisfy perform one function: given a spatial index, a complex 
- * material value is returned.  This is accomplished by extending the Material class and
- * implementing the <get_value> function.
- */
-class Material2D {
-	
-		public:
-			/* Query the material value at a point in real space.
-			 * @x The x index of the query
-			 * @y The y index of the query
-			 *
-			 * The structure of the electromagnetic system being solved is ultimately defined
-			 * in terms of spatially-dependent materials. The material is defined on a 
-			 * spatial grid which is directly compatible with finite differences.
-			 * See <StructuredMaterial> for specific implementations.
-			 *
-			 * @return the complex material at position (x,y).
-			 */
-			virtual std::complex<double> get_value(double x, double y) = 0;
-
-            /* Get a block of values.
-             */
-            virtual void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, double sx, double sy) = 0;
-			virtual ~Material2D() {};
-};
 
 
 /* A polygon which defines the boundary of an entire Yee cell or an arbitrary portion of a Yee cell.
@@ -166,118 +139,6 @@ class MaterialPrimitive {
 		
 };
 
-/* A Circle primitive.
- *
- * A circle is specified by the location of its center and its radius.  
- */
-class Circle : public MaterialPrimitive {
-	
-	private:
-		double _x0,
-			   _y0,
-			   _r;
-
-		std::complex<double> _mat;
-
-	public:
-		/* Constructor
-		 * @x0 the x position of the circle's center (real space)
-		 * @y0 the y position of the circle's center (real space)
-		 * @r the radius of the circle
-		 */
-		Circle(double x0, double y0, double r);
-
-		//- Destructor
-		~Circle();
-
-		/* Determine whether a point in real space is contained within the Circle
-		 * @x the x coordinate (real space)
-		 * @y the y coordinate (real space)
-		 * @return true if the point (x,y) is contained within the circle. False otherwise.
-		 */
-		bool contains_point(double x, double y);
-		
-		bool bbox_contains_point(double x, double y);
-
-		/* Get the circle's material value.
-		 * 
-		 * Note: This does not check if (x,y) is contained in the circle.  Use <contains_point>
-		 * first if that functionality is needed.
-		 *
-		 * @return the complex material value of the circle.
-		 */
-		std::complex<double> get_material(double x, double y);
-		double get_cell_overlap(GridCell& cell);
-
-		/* Set the complex material value of the Circle.
-		 * @mat the complex material value
-		 */
-		void set_material(std::complex<double> mat);
-
-		void set_position(double x0, double y0);
-		void set_radius(double r);
-
-		double get_x0();
-		double get_y0();
-		double get_r();
-};
-
-/* A Rectangle primitive.
- * 
- * A Rectangle is defined by the position of its center and its width and height.
- */
-class Rectangle : public MaterialPrimitive {
-	
-	private:
-		double _x0,
-			   _y0,
-			   _width,
-			   _height;
-
-        Polygon_2D _poly_rep;
-
-		std::complex<double> _mat;
-
-	public:
-		/* Constructor
-		 * @x0 the real space x position of the center of the rectangle 
-		 * @y0 the real space y position of the center of the rectangle
-		 * @width the width of the rectangle
-		 * @height the height of the rectangle
-		 */
-		Rectangle(double x0, double y0, double width, double height);
-
-		//- Destructor
-		~Rectangle();
-
-		/* Determine whether a point in real space is contained within the Rectangle 
-		 * @x the x coordinate (real space)
-		 * @y the y coordinate (real space)
-		 * @return true if the point (x,y) is contained within the Rectangle. False otherwise.
-		 */	
-		bool contains_point(double x, double y);
-
-		bool bbox_contains_point(double x, double y);
-		
-		/* Get the Rectangle's material value.
-		 * 
-		 * Note: This does not check if (x,y) is contained in the Rectangle.  Use 
-		 * <contains_point> first if that functionality is needed.
-		 *
-		 * @return the complex material value of the Rectangle.
-		 */
-		std::complex<double> get_material(double x, double y);
-		double get_cell_overlap(GridCell& cell);
-
-		/* Set the complex material value of the Rectangle.
-		 * @mat the complex material value
-		 */
-		void set_material(std::complex<double> mat);
-
-		void set_width(double w);
-		void set_height(double h);
-		void set_position(double x0, double y0);
-};
 
 /* A solid Polygon primitive.
  *
@@ -373,12 +234,18 @@ class Polygon : public MaterialPrimitive {
 
 };
 
+/* Material class which provides the foundation for defining the system materials/structure.
+ *
+ * A Material must satisfy perform one function: given a spatial index, a complex 
+ * material value is returned.  This is accomplished by extending the Material class and
+ * implementing the <get_value> function.
+ */
 /* A flexible <Material> which consists of layerd <MaterialPrimitives>.
  *
  * A StructuredMaterial consists of one or more MaterialPrimitives defined by the user 
  * which are arranged within the simulation region.  
  */
-class StructuredMaterial2D : public Material2D {
+class StructuredMaterial2D {
 	private:
 		std::list<MaterialPrimitive*> _primitives;
 
@@ -433,47 +300,6 @@ class StructuredMaterial2D : public Material2D {
         std::list<MaterialPrimitive*> get_primitives();
 
 };
-
-/* A 2D material distribution defined by a single constant value.
- *
- * Use this for uniform materials.
- */
-class ConstantMaterial2D : public Material2D {
-        private:
-            std::complex<double> _value;
-	
-		public:
-            ConstantMaterial2D(std::complex<double> value);
-
-			/* Query the material value at a point in real space.
-             *
-             * This will always return the same value
-             *
-			 * @x The x index of the query
-			 * @y The y index of the query
-			 * @return the complex material
-			 */
-			std::complex<double> get_value(double x, double y);
-
-            /* Get a block of values.
-             *
-             * This just fills the provided array with a single value
-             */
-            void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, double sx, double sy);
-
-            /* Set the complex material value.
-             * @val the complex material value
-             */
-            void set_material(std::complex<double> val);
-
-            /* Get the complex material value.
-             *
-             * This function is redundant.
-             *
-             * @return the complex material value.
-             */
-            std::complex<double> get_material();
-}; // ConstantMaterial2D
 
 /* Material class which provides the foundation for defining the system materials/structure.
  *
