@@ -105,13 +105,10 @@ bool MaterialPrimitive::operator<(const MaterialPrimitive& rhs)
 
 //------------------------------ Polygon ------------------------------------/
 
-Polygon::Polygon()
-{
-}
-
-Polygon::Polygon(double* x, double* y, int n)
+Polygon::Polygon(double* x, double* y, int n, std::complex<double> mat)
 {
 	set_points(x, y, n);
+    set_material(mat);
 }
 
 Polygon::~Polygon()

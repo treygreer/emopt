@@ -11,8 +11,8 @@
 #include <vector>
 #include <list>
 
-#ifndef __GRID_HPP__
-#define __GRID_HPP__
+#ifndef __GRID_CUDA_HPP__
+#define __GRID_CUDA_HPP__
 
 // Specify the precision used for computational geometry subroutines
 // In many situations, double is sufficient.  However, cases may be
@@ -162,8 +162,9 @@ class Polygon : public MaterialPrimitive {
 		 * @x list of x positions of polygon vertices
 		 * @y list of y positions of polygon vertices
 		 * @n number of elements in x and y
+		 * @mat the complex material value
 		 */
-		Polygon(double* x, double* y, int n);
+	    Polygon(double* x, double* y, int n, std::complex<double> mat);
 
 		//- Destructor
 		~Polygon();

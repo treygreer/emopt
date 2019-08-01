@@ -39,20 +39,10 @@ libGrid.MaterialPrimitive_get_material_imag.restype = c_double
 ####################################################################################
 # Polygon configuration
 ####################################################################################
-libGrid.Polygon_new.argtypes = []
+libGrid.Polygon_new.argtypes = [c_double_p, c_double_p, c_int, c_double, c_double]
 libGrid.Polygon_new.restype = c_void_p
 libGrid.Polygon_delete.argtypes = [c_void_p]
 libGrid.Polygon_delete.restype = None
-libGrid.Polygon_set_material.argtypes = [c_void_p, c_double, c_double]
-libGrid.Polygon_set_material.restype = None
-libGrid.Polygon_add_point.argtypes = [c_void_p, c_double, c_double]
-libGrid.Polygon_add_point.restype = None
-libGrid.Polygon_add_points.argtypes = [c_void_p, c_double_p, c_double_p, c_int]
-libGrid.Polygon_add_points.restype = None
-libGrid.Polygon_set_points.argtypes = [c_void_p, c_double_p, c_double_p, c_int]
-libGrid.Polygon_set_points.restype = None
-libGrid.Polygon_set_point.argtypes = [c_void_p, c_double, c_double, c_int]
-libGrid.Polygon_set_point.restype = None
 
 #####################################################################################
 # Material3D configuration 

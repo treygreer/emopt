@@ -1,7 +1,7 @@
-#include "Grid.hpp"
+#include "Grid_cuda.hpp"
 
-#ifndef __GRID_CTYPES_HPP__
-#define __GRID_CTYPES_HPP__
+#ifndef __GRID_CUDA_CTYPES_HPP__
+#define __GRID_CUDA_CTYPES_HPP__
 
 using namespace Grid;
 
@@ -25,13 +25,9 @@ extern "C" {
 	////////////////////////////////////////////////////////////////////////////////
 	// Polygon
 	////////////////////////////////////////////////////////////////////////////////
-	Polygon* Polygon_new();
+	Polygon* Polygon_new(double *xs, double *ys, int n,
+						 double material_real, double material_imag);
 	void Polygon_delete(Polygon* poly);
-	void Polygon_add_point(Polygon* poly, double x, double y);
-	void Polygon_add_points(Polygon* poly, double* x, double* y, int n);
-	void Polygon_set_point(Polygon* poly, double x, double y, int index);
-	void Polygon_set_points(Polygon* poly, double* x, double* y, int n);
-	void Polygon_set_material(Polygon* poly, double real, double imag);
 
     ////////////////////////////////////////////////////////////////////////////////
 	// Material3D

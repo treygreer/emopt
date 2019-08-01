@@ -133,19 +133,16 @@ class MaterialPrimitive(object):
 
 class Polygon(MaterialPrimitive):
 
-    def __init__(self, xs=None, ys=None, layer=1, material_value=1.0):
-        self._object = libGrid.Polygon_new()
-        self.set_points(xs,ys)
-        libGrid.Polygon_set_material(self._object, material_value.real, material_value.imag)
-        self.layer = layer
+    def __init__(self, xs, ys, layer=1, material_value=1.0):
+        assert(len(xs) == len(ys))
+        self._object = libGrid.Polygon_new(np.array(xs, dtype=np.float64),
+                                           np.array(ys, dtype=np.float64),
+                                           len(xs),
+                                           material_value.real, material_value.imag)
+        self.layer = layer # invoke MaterialPrimitive setter
 
     def __del__(self):
         libGrid.Polygon_delete(self._object)
-
-    def set_points(self, x, y):
-        x = np.array(x, dtype=np.float64)
-        y = np.array(y, dtype=np.float64)
-        libGrid.Polygon_set_points(self._object, x, y, len(x))
 
 class Material3D(object):
     """Define a general interface for 3D Material distributions.

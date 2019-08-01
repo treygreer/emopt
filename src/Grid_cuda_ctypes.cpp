@@ -38,40 +38,16 @@ double MaterialPrimitive_get_material_imag(MaterialPrimitive* prim,
 // Polygon Primitives
 /////////////////////////////////////////////////////////////////////////////////////
 
-Polygon* Polygon_new()
+Polygon* Polygon_new(double *xs, double *ys, int n,
+					 double material_real, double material_imag)
 {
-	return new Polygon();
+	return new Polygon(xs, ys, n,
+					   std::complex<double>(material_real, material_imag));
 }
 
 void Polygon_delete(Polygon* poly)
 {
 	delete poly;
-}
-
-void Polygon_add_point(Polygon* poly, double x, double y)
-{
-	poly->add_point(x,y);
-}
-
-void Polygon_add_points(Polygon* poly, double* x, double* y, int n)
-{
-	poly->add_points(x,y,n);
-}
-
-
-void Polygon_set_point(Polygon* poly, double x, double y, int index)
-{
-	poly->set_point(x, y, index);
-}
-
-void Polygon_set_points(Polygon* poly, double* x, double* y, int n)
-{
-	poly->set_points(x,y,n);
-}
-
-void Polygon_set_material(Polygon* poly, double real, double imag)
-{
-	poly->set_material(std::complex<double>(real, imag));
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
