@@ -107,31 +107,8 @@ bool MaterialPrimitive::operator<(const MaterialPrimitive& rhs)
 
 Polygon::Polygon(double* x, double* y, int n, std::complex<double> mat)
 {
-	set_points(x, y, n);
-    set_material(mat);
-}
+	_mat = mat;
 
-Polygon::~Polygon()
-{
-	_verts.clear();
-}
-
-void Polygon::add_point(double x, double y)
-{
-	boost::geometry::append(_verts, boost::geometry::make<Point_2D>(x,y));
-
-    // update the bounding box
-    boost::geometry::envelope(_verts, _bbox);
-
-    // correct the geometry
-    boost::geometry::correct(_verts);
-}
-
-/**
- * NOTE: Currently a copy of the input points is made.  This will be slowish.
- */
-void Polygon::add_points(double* x, double* y, int n)
-{
     for(int i = 0; i < n; i++) {
         boost::geometry::append(_verts, boost::geometry::make<Point_2D>(x[i], y[i]));
     }
@@ -143,29 +120,9 @@ void Polygon::add_points(double* x, double* y, int n)
     boost::geometry::correct(_verts);
 }
 
-void Polygon::set_point(double x, double y, int index)
-{
-	Point_2D& p = _verts.outer()[index];
-    p.x(x);
-    p.y(y);
-
-    // update the bounding box
-    boost::geometry::envelope(_verts, _bbox);
-
-    // assume the geometry is correct.
-
-}
-
-void Polygon::set_points(double* x, double* y, int n)
+Polygon::~Polygon()
 {
 	_verts.clear();
-	add_points(x,y,n);
-
-    // update the bounding box
-    boost::geometry::envelope(_verts, _bbox);
-
-    // correct the geometry
-    boost::geometry::correct(_verts);
 }
 
 bool Polygon::contains_point(double x, double y)
@@ -176,29 +133,14 @@ bool Polygon::contains_point(double x, double y)
 	return inside;
 }
 
-bool Polygon::bbox_contains_point(double x, double y)
+std::complex<double> Polygon::get_material()
 {
-    Point_2D p(x,y);
-    bool inside = boost::geometry::within(p, _bbox);
-
-	return inside;
-}
-
-std::complex<double> Polygon::get_material(double x, double y)
-{
-	//if(contains_point(x,y))
 	return _mat;
 }
 
 double Polygon::get_cell_overlap(GridCell& cell)
 {
-    
 	return cell.intersect(_verts);
-}
-
-void Polygon::set_material(std::complex<double> mat)
-{
-	_mat = mat;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -302,14 +244,14 @@ std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 		   contains_p3 && contains_p4 &&
 		   cell.get_area_ratio() == 1.0) 
 		{
-				return prim->get_material(xd,yd);
+				return prim->get_material();
 		}
 		else if(contains_p1 || contains_p2 ||
 		        contains_p3 || contains_p4) 
 		{
 			overlap = prim->get_cell_overlap(cell);
 
-			val += overlap * prim->get_material(xd,yd);
+			val += overlap * prim->get_material();
 		}
 		it++;
 
@@ -360,16 +302,6 @@ void ConstantMaterial3D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int 
             }
         }
     }
-}
-
-void ConstantMaterial3D::set_material(std::complex<double> val)
-{
-    _value = val;
-}
-
-std::complex<double> ConstantMaterial3D::get_material()
-{
-    return _value;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////

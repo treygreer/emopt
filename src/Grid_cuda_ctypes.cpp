@@ -12,28 +12,6 @@ void MaterialPrimitive_set_layer(MaterialPrimitive* prim, int layer)
 	prim->set_layer(layer);
 }
 
-int MaterialPrimitive_get_layer(MaterialPrimitive* prim)
-{
-	return prim->get_layer();
-}
-
-bool MaterialPrimitive_contains_point(MaterialPrimitive* prim, double x, double y)
-{
-	return prim->contains_point(x,y);
-}
-
-double MaterialPrimitive_get_material_real(MaterialPrimitive* prim, 
-                                           double x, double y)
-{
-	return std::real(prim->get_material(x,y));
-}
-
-double MaterialPrimitive_get_material_imag(MaterialPrimitive* prim,
-                                           double x, double y)
-{
-	return std::imag(prim->get_material(x,y));
-}
-
 /////////////////////////////////////////////////////////////////////////////////////
 // Polygon Primitives
 /////////////////////////////////////////////////////////////////////////////////////
@@ -88,21 +66,6 @@ void Material3D_get_values(Material3D* mat, complex64* arr, int k1, int k2,
 ConstantMaterial3D* ConstantMaterial3D_new(double real, double imag)
 {
     return new ConstantMaterial3D(std::complex<double>(real, imag));
-}
-
-void ConstantMaterial3D_set_material(ConstantMaterial3D* cm, double real, double imag)
-{
-    cm->set_material(std::complex<double>(real, imag));
-}
-
-double ConstantMaterial3D_get_material_real(ConstantMaterial3D* cm)
-{
-    return std::real(cm->get_material());
-}
-
-double ConstantMaterial3D_get_material_imag(ConstantMaterial3D* cm)
-{
-    return std::imag(cm->get_material());
 }
 
 /////////////////////////////////////////////////////////////////////////////////////

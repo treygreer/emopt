@@ -26,15 +26,6 @@ c_double_p = ndpointer(np.double, ndim=1, flags='C')
 ####################################################################################
 libGrid.MaterialPrimitive_set_layer.argtypes = [c_void_p, c_int]
 libGrid.MaterialPrimitive_set_layer.restype = None
-libGrid.MaterialPrimitive_get_layer.argtypes = [c_void_p]
-libGrid.MaterialPrimitive_get_layer.restype = c_int
-libGrid.MaterialPrimitive_contains_point.argtypes = [c_void_p, c_double, c_double]
-libGrid.MaterialPrimitive_contains_point.restype = c_bool
-libGrid.MaterialPrimitive_get_material_real.argtypes = [c_void_p, c_double, c_double]
-libGrid.MaterialPrimitive_get_material_real.restype = c_double
-libGrid.MaterialPrimitive_get_material_imag.argtypes = [c_void_p, c_double, c_double]
-libGrid.MaterialPrimitive_get_material_imag.restype = c_double
-
 
 ####################################################################################
 # Polygon configuration
@@ -60,12 +51,6 @@ libGrid.Material3D_get_values.restype = None
 ####################################################################################
 libGrid.ConstantMaterial3D_new.argtypes = [c_double, c_double]
 libGrid.ConstantMaterial3D_new.restype = c_void_p
-libGrid.ConstantMaterial3D_set_material.argtypes = [c_void_p, c_double, c_double]
-libGrid.ConstantMaterial3D_set_material.restype = None
-libGrid.ConstantMaterial3D_get_material_real.argtypes = [c_void_p]
-libGrid.ConstantMaterial3D_get_material_real.restype = None
-libGrid.ConstantMaterial3D_get_material_imag.argtypes = [c_void_p]
-libGrid.ConstantMaterial3D_get_material_imag.restype = None
 
 ####################################################################################
 # StructuredMaterial3D configuration

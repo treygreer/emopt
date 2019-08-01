@@ -100,26 +100,11 @@ class MaterialPrimitive {
 		 */
 		virtual bool contains_point(double x, double y) = 0;
 		
-		/* Check if a given point lies within the boudning box of this MaterialPrimitive.
-		 * @x the real space x coordinate
-		 * @y the real space y coordinate
+		/* get the complex material value of the MaterialPrimitive 
 		 *
-		 * The implementing class must define when a point (x,y) is within the material primitve's
-		 * bounding box.
-		 *
-		 * @return true if (x,y) falls within the material primitive's bounding box. False otherwise.
+		 * @return the complex material value
 		 */
-		virtual bool bbox_contains_point(double x, double y) = 0;
-
-		/* get the complex material value of the MaterialPrimitive at position (x,y).
-		 * @x the real space x coordinate
-		 * @y the real space y coordinate
-		 *
-		 * Warning: some inheriting classes may assume that <contains_point> was called prior.
-		 *
-		 * @return the complex material value at real space position (x,y)
-		 */
-		virtual std::complex<double> get_material(double x, double y) = 0;
+		virtual std::complex<double> get_material() = 0;
 		
 		virtual double get_cell_overlap(GridCell& cell) = 0;
 
@@ -153,11 +138,7 @@ class Polygon : public MaterialPrimitive {
 		Polygon_2D _verts;
         BBox _bbox;
         
-
 	public:
-		//- Default Constructor
-		Polygon();
-
 		/* Constructor
 		 * @x list of x positions of polygon vertices
 		 * @y list of y positions of polygon vertices
@@ -169,53 +150,12 @@ class Polygon : public MaterialPrimitive {
 		//- Destructor
 		~Polygon();
 		
-		/* Add a single vertice to the Polygon
-		 * @x the x position of the point to be added
-		 * @y the y position of the point to be added
-		 *
-		 * Points are added to the end of an internally-stored list of points.  In order for 
-		 * functions such as <contains_point> to work properly, points must be added in 
-		 * either clockwise or counterclockwise order.
-		 */
-		void add_point(double x, double y);
-
-		/* Add a single vertice to the Polygon
-		 * @x the x coordinates of the vertices to be added
-		 * @x the y coordinates of the vertices to be added
-		 * @n the number of points to be added
-		 *
-		 * The list of vertices are appended to the end of an internally maintained list.
-		 * In order for functions such as <contains_point> to work properly, points must be 
-		 * added in either clockwise or counterclockwise order.
-		 */
-		void add_points(double* x, double* y, int n);
-
-		/* Modify an existing point in the polygon
-		 * @x the new x coordinate of the point
-		 * @y the new y coordinate of the point
-		 * @index the index of the polygon to be modified
-		 */
-		void set_point(double x, double y, int index);
-
-		/* Set the points of the Polygon
-		 * @x the x coordinates of the points
-		 * @y the y coordinates of the points
-		 * @n the number of points
-		 *
-		 * The current list of vertices is cleared and the supplied points are added.
-		 * In order for functions such as <contains_point> to work properly, points must be 
-		 * provided in either clockwise or counterclockwise order.
-		 */	
-		void set_points(double* x, double* y, int n);
-		
 		/* Determine whether a point in real space is contained within the Polygon 
 		 * @x the x coordinate (real space)
 		 * @y the y coordinate (real space)
 		 * @return true if the point (x,y) is contained within the Polygon. False otherwise.
 		 */
 		bool contains_point(double x, double y);
-
-		bool bbox_contains_point(double x, double y);
 
 		/* Get the Polygon's material value.
 		 * 
@@ -224,14 +164,9 @@ class Polygon : public MaterialPrimitive {
 		 *
 		 * @return the complex material value of the Polygon.
 		 */
-		std::complex<double> get_material(double x, double y);
+		std::complex<double> get_material();
 
 		double get_cell_overlap(GridCell& cell);
-
-		/* Set the complex material value of the Polygon.
-		 * @mat the complex material value
-		 */
-		void set_material(std::complex<double> mat);
 
 };
 
@@ -359,18 +294,6 @@ class ConstantMaterial3D : public Material3D {
             void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2,
                             int i1, int i2, double sx, double sy, double sz);
 
-            /* Set the complex material value.
-             * @val the complex material value
-             */
-            void set_material(std::complex<double> val);
-
-            /* Get the complex material value.
-             *
-             * This function is redundant.
-             *
-             * @return the complex material value.
-             */
-            std::complex<double> get_material();
 }; // ConstantMaterial3D
 
 /* Define a 3D planar stack structure.

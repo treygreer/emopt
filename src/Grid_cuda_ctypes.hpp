@@ -17,10 +17,6 @@ extern "C" {
 	// MaterialPrimitive
 	////////////////////////////////////////////////////////////////////////////////
 	void MaterialPrimitive_set_layer(MaterialPrimitive* prim, int layer);
-	int MaterialPrimitive_get_layer(MaterialPrimitive* prim);
-	bool MaterialPrimitive_contains_point(MaterialPrimitive* prim, double x, double y);
-	double MaterialPrimitive_get_material_real(MaterialPrimitive* prim, double x, double y);
-	double MaterialPrimitive_get_material_imag(MaterialPrimitive* prim, double x, double y);
 
 	////////////////////////////////////////////////////////////////////////////////
 	// Polygon
@@ -43,9 +39,6 @@ extern "C" {
 	// ConstantMaterial3D
 	////////////////////////////////////////////////////////////////////////////////
     ConstantMaterial3D* ConstantMaterial3D_new(double real, double imag);
-    void ConstantMaterial3D_set_material(ConstantMaterial3D* cm, double real, double imag);
-	double ConstantMaterial3D_get_material_real(ConstantMaterial3D* cm);
-	double ConstantMaterial3D_get_material_imag(ConstantMaterial3D* cm);
 
 	////////////////////////////////////////////////////////////////////////////////
 	// Structured3DMaterial

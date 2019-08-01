@@ -64,11 +64,6 @@ class MaterialPrimitive(object):
     ----
     Pythonify this function using properties.
 
-    Methods
-    -------
-    contains_point(self, x, y)
-        Check if a material primitive contains the supplied (x,y) coordinate
-
     Attributes
     ----------
     layer : int
@@ -89,18 +84,6 @@ class MaterialPrimitive(object):
         self._layer = newlayer
         libGrid.MaterialPrimitive_set_layer(self._object, c_int(newlayer))
 
-    def get_layer(self):
-        """Get the layer of the primitive.
-
-        Returns
-        -------
-        int
-            The layer.
-        """
-        warning_message('get_layer() is deprecated. Use property ' \
-            'myprim.layer instead.', 'emopt.grid')
-        return libGrid.MaterialPrimitive_get_layer(self._object)
-
     def set_layer(self, layer):
         """Set the layer of the primitive.
 
@@ -113,23 +96,6 @@ class MaterialPrimitive(object):
             'myprim.layer=... instead.', 'emopt.grid')
         libGrid.MaterialPrimitive_set_layer(self._object, c_int(layer))
 
-    def contains_point(self, x, y):
-        """Check if a material primitive contains the supplied (x,y) coordinate
-
-        Parameters
-        ----------
-        x : float
-            The real-space x coordinate
-        y : float
-            The real-space y coordinate
-
-        Returns
-        -------
-        bool
-            True if the (x,y) point is contained within the primitive, false
-            otherwise.
-        """
-        return libGrid.MaterialPrimitive_contains_point(self._object, x, y)
 
 class Polygon(MaterialPrimitive):
 
