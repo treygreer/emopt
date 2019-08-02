@@ -28,7 +28,6 @@ from .grid_cuda_ctypes import libGrid
 import numpy as np
 import scipy
 from ctypes import c_int, c_double
-from .grid import Material3D as noncuda_Material3D
 
 from .misc import DomainCoordinates
 from .misc import warning_message
@@ -261,6 +260,7 @@ class ConstantMaterial3D(Material3D):
                                               new_value.imag)
         self._material_value = new_value
 
+from .grid import Material3D as noncuda_Material3D
 class StructuredMaterial3D(Material3D, noncuda_Material3D):
     """Create a 3D material consisting of one or more primitive shapes
     (rectangles, polygons, etc) which thickness along z.
@@ -274,78 +274,26 @@ class StructuredMaterial3D(Material3D, noncuda_Material3D):
 
     Parameters
     ----------
-    X : float
-        The x width of the underlying grid.
-    Y : float
-        The y width of the underlying grid.
-    Z : float
-        The z width of the underlying grid.
-    dx : float
-        The grid spacing of the underlying grid in the x direction.
-    dy : float
-        The grid spacing of the underlying grid in the y direction.
-    dz : float
-        The grid spacing of the underlying grid in the z direction.
+    [X, Y, Z]: floats
+        The x,y,z width of the underlying grid.
+    [dx, dy, dz]: floats
+        The grid spacing of the underlying grid
+    prim_zspans: list of [primitive, zmin, zmax] lists
 
     Attributes
     ----------
     primitives : list
         The list of primitives used to define the material distribution.
     """
-    def __init__(self, X, Y, Z, dx, dy, dz):
-        self._object = libGrid.StructuredMaterial3D_new(X, Y, Z, dx, dy, dz)
+    def __init__(self, XYZ, dxdydz, prim_zspans):
+        self._object = libGrid.StructuredMaterial3D_new(XYZ[0], XYZ[1], XYZ[2],
+                                                        dxdydz[0], dxdydz[1], dxdydz[2])
         self._primitives = []
-        self._zmins = []
-        self._zmaxs = []
-
-    @property
-    def primitives(self):
-        return self._primitives
-
-    @primitives.setter
-    def primitive(self):
-        warning_message('The primitive list cannot be modified in this way.',
-                        'emopt.grid')
-
-    @property
-    def zmins(self):
-        return self._zmins
-
-    @zmins.setter
-    def zmins(self):
-        warning_message('The list of minimum z coordinates cannot be changed in this way.',
-                        'emopt.grid')
-
-    @property
-    def zmaxs(self):
-        return self._zmaxs
-
-    @zmaxs.setter
-    def zmaxs(self):
-        warning_message('The list of maximum z coordinates cannot be changed in this way.',
-                        'emopt.grid')
+        for (prim, zmin, zmax) in prim_zspans:
+            self._primitives.append(prim)
+            libGrid.StructuredMaterial3D_add_primitive(self._object, prim._object,
+                                                       zmin, zmax)
 
     def __del__(self):
         libGrid.StructuredMaterial3D_delete(self._object)
-
-    def add_primitive(self, prim, z1, z2):
-        """Add a primitive to the StructuredMaterial.
-
-        This could be an emopt.grid.Rectangle, emopt.grid.Polygon,
-        etc--anything that extends emopt.grid.MaterialPrimitive.
-
-        Parameters
-        ----------
-        prim : MaterialPrimitive
-            The MaterialPrimitive to add.
-        z1 : float
-            The minimum z-coordinate of the primitive to add.
-        z2 : float
-            The maximum z-coordinate of the primitive to add.
-        """
-        self._primitives.append(prim)
-        self._zmins.append(z1)
-        self._zmaxs.append(z2)
-        libGrid.StructuredMaterial3D_add_primitive(self._object, prim._object,
-                                                  z1, z2)
 
