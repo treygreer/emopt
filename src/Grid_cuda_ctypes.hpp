@@ -13,11 +13,6 @@ typedef struct struct_complex64 {
 
 extern "C" {
 
-    ////////////////////////////////////////////////////////////////////////////////
-	// MaterialPrimitive
-	////////////////////////////////////////////////////////////////////////////////
-	void MaterialPrimitive_set_layer(MaterialPrimitive* prim, int layer);
-
 	////////////////////////////////////////////////////////////////////////////////
 	// Polygon
 	////////////////////////////////////////////////////////////////////////////////
@@ -45,7 +40,7 @@ extern "C" {
 	////////////////////////////////////////////////////////////////////////////////
     StructuredMaterial3D* StructuredMaterial3D_new(double X, double Y, double Z, double dx, double dy, double dz);
 	void StructuredMaterial3D_delete(StructuredMaterial3D* sm);
-	void StructuredMaterial3D_add_primitive(StructuredMaterial3D* sm, MaterialPrimitive* prim, double z1, double z2);
+	void StructuredMaterial3D_add_polygon(StructuredMaterial3D* sm, Polygon* poly, double z1, double z2);
 
 }
 

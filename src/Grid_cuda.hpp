@@ -65,73 +65,13 @@ class GridCell {
 		double get_area_ratio();		
 };
 
-/* A shape or other (piecewise) continuous structure which defines the Material in a 
- * region of real space.
- *
- * A MaterialPrimitive is a shape such as a rectangle, circle, or polygon which defines the 
- * complex material in a region of real-space (i.e. space defined by doubleing point coordinates,
- * not integer indices corresponding to an array). See <Circle>, <Rectangle>, and <Polygon>
- * for implementation examples.
- *
- * In order to build up complex Materials, many MaterialPrimitives can combined using
- * <StructuredMaterial>.  In order to facilitate complicated arrangements, each 
- * MaterialPrimitive is assigned a "layer" using <set_layer> which is used to determine
- * which material value should be used if multiple MaterialPrimitives overlap at a point
- * in space. The lower the layer, the higher priority of the MaterialPrimitive.
- */
-class MaterialPrimitive {
-	private:
-		int _layer;
-
-	public:
-		//- Constructor: defined to avoid compiler warnings
-		MaterialPrimitive();
-
-		//- Destructor: defined to avoid compiler warnings
-		virtual ~MaterialPrimitive(){};
-
-		/* Check if a given point lies within this MaterialPrimitive.
-		 * @x the real space x coordinate
-		 * @y the real space y coordinate
-		 *
-		 * The implementing class must define when a point (x,y) is within the material primitve.
-		 *
-		 * @return true if (x,y) falls within the material primitive. False otherwise.
-		 */
-		virtual bool contains_point(double x, double y) = 0;
-		
-		/* get the complex material value of the MaterialPrimitive 
-		 *
-		 * @return the complex material value
-		 */
-		virtual std::complex<double> get_material() = 0;
-		
-		virtual double get_cell_overlap(GridCell& cell) = 0;
-
-		/* Set the layer of the primitive.
-		 * 
-		 * If multiple MaterialPrimitives overlap a certain region in space, the material of 
-		 * the MaterialPrimitive with the lowest layer should be used.
-		 */
-		void set_layer(int layer);
-
-		/* Get the layer.
-		 * @return the layer.
-		 */
-		int get_layer() const;
-
-		bool operator<(const MaterialPrimitive& rhs);
-		
-};
-
-
 /* A solid Polygon primitive.
  *
  * A Polygon is defined by a list of points specified in clockwise or counterclockwise order.
  * Both concave and convex polygons are supported. The Polygon is intended to be a flexible
  * primitive that can handle both simple and complicated geometry.
  */
-class Polygon : public MaterialPrimitive {
+class Polygon {
 	private:
 		std::complex<double> _mat;
 
@@ -176,14 +116,14 @@ class Polygon : public MaterialPrimitive {
  * material value is returned.  This is accomplished by extending the Material class and
  * implementing the <get_value> function.
  */
-/* A flexible <Material> which consists of layerd <MaterialPrimitives>.
+/* A flexible <Material> which consists of layerd <Polygons>.
  *
- * A StructuredMaterial consists of one or more MaterialPrimitives defined by the user 
+ * A StructuredMaterial consists of one or more Polygons defined by the user 
  * which are arranged within the simulation region.  
  */
 class StructuredMaterial2D {
 	private:
-		std::list<MaterialPrimitive*> _primitives;
+		std::list<Polygon*> _polygons;
 
         std::complex<double> _value;
 
@@ -217,8 +157,8 @@ class StructuredMaterial2D {
 		 * <MaterialPrimitive> objects not go out of scope while the StructuredMaterial is
 		 * still in use.
 		 */
-		void add_primitive(MaterialPrimitive* prim);
-        void add_primitives(std::list<MaterialPrimitive*> primitives);
+		void add_polygon(Polygon* poly);
+        void add_polygons(std::list<Polygon*> polys);
 
 		/* Get the complex material value at an indexed position.
 		 * @x the x index (column) of the material value
@@ -233,7 +173,7 @@ class StructuredMaterial2D {
          * @return The std::list<MaterialPrimitive*> containing the constituent
          * MaterialPrimitives
          */
-        std::list<MaterialPrimitive*> get_primitives();
+        std::list<Polygon*> get_polygons();
 
 };
 
@@ -357,7 +297,7 @@ class StructuredMaterial3D : public Material3D {
 		 * <MaterialPrimitive> objects not go out of scope while the StructuredMaterial is
 		 * still in use.
 		 */
-		void add_primitive(MaterialPrimitive* prim, double z1, double z2);
+		void add_polygon(Polygon* poly, double z1, double z2);
 
 		/* Get the complex material value at an indexed position.
 		 * @x the x index (column) of the material value

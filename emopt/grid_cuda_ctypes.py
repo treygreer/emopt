@@ -22,12 +22,6 @@ c_complex_1D_p = ndpointer(np.complex128, ndim=1, flags='C')
 c_double_p = ndpointer(np.double, ndim=1, flags='C')
 
 ####################################################################################
-# MaterialPrimitives configuration
-####################################################################################
-libGrid.MaterialPrimitive_set_layer.argtypes = [c_void_p, c_int]
-libGrid.MaterialPrimitive_set_layer.restype = None
-
-####################################################################################
 # Polygon configuration
 ####################################################################################
 libGrid.Polygon_new.argtypes = [c_double_p, c_double_p, c_int, c_double, c_double]
@@ -60,8 +54,8 @@ libGrid.StructuredMaterial3D_new.argtypes = [c_double, c_double, c_double,
 libGrid.StructuredMaterial3D_new.restype = c_void_p
 libGrid.StructuredMaterial3D_delete.argtypes = [c_void_p]
 libGrid.StructuredMaterial3D_delete.restype = None
-libGrid.StructuredMaterial3D_add_primitive.argtypes = [c_void_p, c_void_p,
-                                                       c_double, c_double]
-libGrid.StructuredMaterial3D_add_primitive.restype = None
+libGrid.StructuredMaterial3D_add_polygon.argtypes = [c_void_p, c_void_p,
+                                                     c_double, c_double]
+libGrid.StructuredMaterial3D_add_polygon.restype = None
 
 

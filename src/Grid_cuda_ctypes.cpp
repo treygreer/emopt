@@ -4,15 +4,6 @@
 #include <Eigen/Dense>
 
 /////////////////////////////////////////////////////////////////////////////////////
-// MaterialPrimitives
-/////////////////////////////////////////////////////////////////////////////////////
-
-void MaterialPrimitive_set_layer(MaterialPrimitive* prim, int layer)
-{
-	prim->set_layer(layer);
-}
-
-/////////////////////////////////////////////////////////////////////////////////////
 // Polygon Primitives
 /////////////////////////////////////////////////////////////////////////////////////
 
@@ -82,10 +73,10 @@ void StructuredMaterial3D_delete(StructuredMaterial3D* sm)
     delete sm;
 }
 
-void StructuredMaterial3D_add_primitive(StructuredMaterial3D* sm, 
-                                        MaterialPrimitive* prim, 
-                                        double z1, double z2)
+void StructuredMaterial3D_add_polygon(StructuredMaterial3D* sm, 
+                                      Polygon* poly, 
+									  double z1, double z2)
 {
-  sm->add_primitive(prim, z1, z2);  
+  sm->add_polygon(poly, z1, z2);  
 }
 

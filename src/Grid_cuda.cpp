@@ -87,21 +87,6 @@ double GridCell::get_area_ratio()
 	return _area/_max_area;
 }		
 
-//------------------------------ MaterialPrimitives ------------------------------------/
-MaterialPrimitive::MaterialPrimitive()
-{
-	_layer = 1;
-}
-
-int MaterialPrimitive::get_layer() const { return _layer; }
-void MaterialPrimitive::set_layer(int layer) { _layer = layer; }
-
-
-bool MaterialPrimitive::operator<(const MaterialPrimitive& rhs)
-{
-	return _layer < rhs.get_layer();
-}
-
 
 //------------------------------ Polygon ------------------------------------/
 
@@ -152,37 +137,24 @@ StructuredMaterial2D::StructuredMaterial2D(double w, double h, double dx, double
 
 StructuredMaterial2D::~StructuredMaterial2D() {}
 
-/* It is important to the material averaging algorithm that primitives be stored in an 
+/* It is important to the material averaging algorithm that polygons be stored in an 
  * ordered list according to their layer.  Lower layers are stored first (have priority).
- * This means that once you have added a primitive to a list, you cannot change its
+ * This means that once you have added a polygon to a list, you cannot change its
  * layer!
  */
-void StructuredMaterial2D::add_primitive(MaterialPrimitive* prim)
+void StructuredMaterial2D::add_polygon(Polygon* poly)
 {
-	std::list<MaterialPrimitive*>::iterator it, insert_pos = _primitives.end();
+	std::list<Polygon*>::iterator it, insert_pos = _polygons.end();
 
-	if(_primitives.size() == 0) {
-		_primitives.push_back(prim);
-	}
-	else {
-		for(it = _primitives.begin(); it != _primitives.end(); it++) {
-			if( prim->get_layer() < (*it)->get_layer() ) {
-				insert_pos = it; 
-				break;
-			}
-		}
-
-		_primitives.insert(it, prim);
-	}
-
+	_polygons.insert(_polygons.begin(), poly);
 }
 
 
-void StructuredMaterial2D::add_primitives(std::list<MaterialPrimitive*> primitives)
+void StructuredMaterial2D::add_polygons(std::list<Polygon*> polygons)
 {
-    std::list<MaterialPrimitive*>::iterator it;
-    for(it = primitives.begin(); it != primitives.end(); it++) {
-        add_primitive(*it);
+    std::list<Polygon*>::iterator it;
+    for(it = polygons.begin(); it != polygons.end(); it++) {
+        add_polygon(*it);
     }
 }
 
@@ -205,8 +177,8 @@ void StructuredMaterial2D::get_values(ArrayXcd& grid, int k1, int k2, int j1, in
 std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 {
 	std::complex<double> val = 0.0;
-	std::list<MaterialPrimitive*>::iterator it = _primitives.begin();
-	MaterialPrimitive* prim;
+	std::list<Polygon*>::iterator it = _polygons.begin();
+	Polygon* poly;
 	GridCell cell;
 	
 	double xd = x*_dx, //+ _dx/2.0,
@@ -225,33 +197,33 @@ std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 
 	cell.set_vertices(xmin,xmax,ymin,ymax);
 	
-	if(_primitives.size() == 0) {
+	if(_polygons.size() == 0) {
 		std::cerr << "Error: StructuredMaterial list is empty." << std::endl;
 		return 0.0;
 	}
 
 	//std::cout << "------------------------" << std::endl;
-	while(it != _primitives.end()) {
-		prim = (*it);
+	while(it != _polygons.end()) {
+		poly = (*it);
         
         // These values are used twice, so we recompute them
-        contains_p1 = prim->contains_point(xmin,ymin);
-        contains_p2 = prim->contains_point(xmax,ymin);
-        contains_p3 = prim->contains_point(xmax,ymax);
-        contains_p4 = prim->contains_point(xmin,ymax);
+        contains_p1 = poly->contains_point(xmin,ymin);
+        contains_p2 = poly->contains_point(xmax,ymin);
+        contains_p3 = poly->contains_point(xmax,ymax);
+        contains_p4 = poly->contains_point(xmin,ymax);
 		
 		if(contains_p1 && contains_p2 &&
 		   contains_p3 && contains_p4 &&
 		   cell.get_area_ratio() == 1.0) 
 		{
-				return prim->get_material();
+				return poly->get_material();
 		}
 		else if(contains_p1 || contains_p2 ||
 		        contains_p3 || contains_p4) 
 		{
-			overlap = prim->get_cell_overlap(cell);
+			overlap = poly->get_cell_overlap(cell);
 
-			val += overlap * prim->get_material();
+			val += overlap * poly->get_material();
 		}
 		it++;
 
@@ -270,9 +242,9 @@ std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 }
 
 
-std::list<MaterialPrimitive*> StructuredMaterial2D::get_primitives()
+std::list<Polygon*> StructuredMaterial2D::get_polygons()
 {
-    return _primitives;
+    return _polygons;
 }
 
 
@@ -326,7 +298,7 @@ StructuredMaterial3D::~StructuredMaterial3D()
     }
 }
 
-void StructuredMaterial3D::add_primitive(MaterialPrimitive* prim, double z1, double z2)
+void StructuredMaterial3D::add_polygon(Polygon* poly, double z1, double z2)
 {
     // Dummy variables
     StructuredMaterial2D* layer;
@@ -360,7 +332,7 @@ void StructuredMaterial3D::add_primitive(MaterialPrimitive* prim, double z1, dou
         _zs.push_back(z2);
         
         layer = new StructuredMaterial2D(_X, _Y, _dx, _dy);
-        layer->add_primitive(prim);
+        layer->add_polygon(poly);
         _layers.push_back(layer);
 
         return;
@@ -403,14 +375,14 @@ void StructuredMaterial3D::add_primitive(MaterialPrimitive* prim, double z1, dou
             // make sure the point to insert is not already in the stack
             if(z != *itz_ins) {
                 layer = new StructuredMaterial2D(_X, _Y, _dx, _dy);
-                layer->add_primitives( (*itl_ins)->get_primitives() );
+                layer->add_polygons( (*itl_ins)->get_polygons() );
                 _layers.insert(itl_ins, layer);
                 _zs.insert(++itz_ins, z);
             }
         }
     }
 
-    // Finally, insert the supplied MaterialPrimitve into the desired locations
+    // Finally, insert the supplied Polygon into the desired locations
     itz = _zs.begin();
     itl = _layers.begin();
 
@@ -418,7 +390,7 @@ void StructuredMaterial3D::add_primitive(MaterialPrimitive* prim, double z1, dou
     while(itl != _layers.end()) {
         z = (*itz);
         if(z >= z1 && z < z2) {
-            (*itl)->add_primitive(prim);
+            (*itl)->add_polygon(poly);
         }
         itz++;
         itl++;
@@ -426,9 +398,9 @@ void StructuredMaterial3D::add_primitive(MaterialPrimitive* prim, double z1, dou
 
     //for(itl = _layers.begin(); itl != _layers.end(); itl++) {
     //    std::cout << std::endl;
-    //    std::list<MaterialPrimitive*> prims = (*itl)->get_primitives();
+    //    std::list<Polygon*> polys = (*itl)->get_polygons();
 
-    //    for(auto ip = prims.begin(); ip != prims.end(); ip++)
+    //    for(auto ip = polys.begin(); ip != polys.end(); ip++)
     //        std::cout << *ip << std::endl;
     //}
 

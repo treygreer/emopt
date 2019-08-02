@@ -53,50 +53,7 @@ class GridMaterial3D(object):
         return self.grid[i,j,k]
 
 
-class MaterialPrimitive(object):
-    """Define a MaterialPrimitive.
-
-    A MaterialPrimitive is a material distribution belonging to shapes like
-    rectangles, circules, polygons, etc.
-
-    TODO
-    ----
-    Pythonify this function using properties.
-
-    Attributes
-    ----------
-    layer : int
-        The layer of the material primitive. Lower means higher priority in
-        terms of visibility.
-    """
-
-    def __init__(self):
-        self._object = None
-        self._layer = 1
-
-    @property
-    def layer(self):
-        return self._layer
-
-    @layer.setter
-    def layer(self, newlayer):
-        self._layer = newlayer
-        libGrid.MaterialPrimitive_set_layer(self._object, c_int(newlayer))
-
-    def set_layer(self, layer):
-        """Set the layer of the primitive.
-
-        Parameters
-        ----------
-        layer : int
-            The new layer.
-        """
-        warning_message('set_layer(...) is deprecated. Use property ' \
-            'myprim.layer=... instead.', 'emopt.grid')
-        libGrid.MaterialPrimitive_set_layer(self._object, c_int(layer))
-
-
-class Polygon(MaterialPrimitive):
+class Polygon(object):
 
     def __init__(self, xs, ys, layer=1, material_value=1.0):
         assert(len(xs) == len(ys))
@@ -104,7 +61,6 @@ class Polygon(MaterialPrimitive):
                                            np.array(ys, dtype=np.float64),
                                            len(xs),
                                            material_value.real, material_value.imag)
-        self.layer = layer # invoke MaterialPrimitive setter
 
     def __del__(self):
         libGrid.Polygon_delete(self._object)
@@ -262,8 +218,8 @@ class ConstantMaterial3D(Material3D):
 
 from .grid import Material3D as noncuda_Material3D
 class StructuredMaterial3D(Material3D, noncuda_Material3D):
-    """Create a 3D material consisting of one or more primitive shapes
-    (rectangles, polygons, etc) which thickness along z.
+    """Create a 3D material consisting of one or more polygons
+    with thickness along z.
 
     Currently StructuredMaterial3D only supports layered slab structures.
 
@@ -278,21 +234,17 @@ class StructuredMaterial3D(Material3D, noncuda_Material3D):
         The x,y,z width of the underlying grid.
     [dx, dy, dz]: floats
         The grid spacing of the underlying grid
-    prim_zspans: list of [primitive, zmin, zmax] lists
+    poly_zspans: list of [polygon, zmin, zmax] lists
 
-    Attributes
-    ----------
-    primitives : list
-        The list of primitives used to define the material distribution.
     """
-    def __init__(self, XYZ, dxdydz, prim_zspans):
+    def __init__(self, XYZ, dxdydz, poly_zspans):
         self._object = libGrid.StructuredMaterial3D_new(XYZ[0], XYZ[1], XYZ[2],
                                                         dxdydz[0], dxdydz[1], dxdydz[2])
-        self._primitives = []
-        for (prim, zmin, zmax) in prim_zspans:
-            self._primitives.append(prim)
-            libGrid.StructuredMaterial3D_add_primitive(self._object, prim._object,
-                                                       zmin, zmax)
+        self._polygons = []
+        for (poly, zmin, zmax) in poly_zspans:
+            self._polygons.append(poly)
+            libGrid.StructuredMaterial3D_add_polygon(self._object, poly._object,
+                                                     zmin, zmax)
 
     def __del__(self):
         libGrid.StructuredMaterial3D_delete(self._object)
