@@ -24,7 +24,6 @@
 
 typedef boost::geometry::model::d2::point_xy<double> Point_2D;
 typedef boost::geometry::model::polygon<Point_2D> Polygon_2D;
-typedef boost::geometry::model::box<Point_2D> BBox;
 using namespace Eigen;
 
 typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
@@ -46,11 +45,7 @@ namespace Grid {
  */
 class GridCell {
 	private:
-        const static int NPOLY = 4;
-		std::vector<Polygon_2D> _verts;
-		std::vector<Polygon_2D> _diffs;
-
-        Polygon_2D _original;
+		std::vector<Polygon_2D> _polys;
 
 		double _area,
 			   _max_area;
@@ -60,8 +55,6 @@ class GridCell {
 		
 		void set_vertices(double xmin, double xmax, double ymin, double ymax);
 		double intersect(const Polygon_2D poly);
-		double get_area();
-		double get_max_area();
 		double get_area_ratio();		
 };
 
@@ -76,7 +69,6 @@ class Polygon {
 		std::complex<double> _mat;
 
 		Polygon_2D _verts;
-        BBox _bbox;
         
 	public:
 		/* Constructor
@@ -127,15 +119,15 @@ class StructuredMaterial2D {
 
         std::complex<double> _value;
 
-		double _w,
-			   _h,
+		double _X,
+			   _Y,
 			   _dx,
 			   _dy;
 	public:
 
 		/* Constructor
-		 * @w the width of the simulation region
-		 * @h the height of the simulation region
+		 * @X the width of the simulation region
+		 * @Y the height of the simulation region
 		 * @dx the horizontal grid spacing of the simulation region
 		 * @dy the vertical grid spacing of the simulation region
 		 *
@@ -143,7 +135,7 @@ class StructuredMaterial2D {
 		 * the corresponding FDFD object.  This is essential to mapping from real space to 
 		 * array indexing when constructing the system matrix.
 		 */
-		StructuredMaterial2D(double w, double h, double dx, double dy);
+		StructuredMaterial2D(double X, double Y, double dx, double dy);
 
 		//- Destructor
 		~StructuredMaterial2D();

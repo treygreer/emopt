@@ -243,6 +243,7 @@ class StructuredMaterial3D(Material3D, noncuda_Material3D):
         self._polygons = []
         for (poly, zmin, zmax) in poly_zspans:
             self._polygons.append(poly)
+            print(f'StructuredMaterial3D_new: polygon={poly._object}, zmin={zmin}, zmax={zmax}')
             libGrid.StructuredMaterial3D_add_polygon(self._object, poly._object,
                                                      zmin, zmax)
 

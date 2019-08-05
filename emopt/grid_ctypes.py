@@ -21,8 +21,6 @@ c_complex_2D_p = ndpointer(np.complex128, ndim=2, flags='C')
 c_complex_1D_p = ndpointer(np.complex128, ndim=1, flags='C')
 c_double_p = ndpointer(np.double, ndim=1, flags='C')
 
-print("##################################### non-cuda ##############################################")
-
 #####################################################################################
 # Material2D configuration 
 #####################################################################################

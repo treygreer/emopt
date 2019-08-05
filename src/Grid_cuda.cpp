@@ -17,7 +17,7 @@ GridCell::GridCell()
 void GridCell::set_vertices(double xmin, double xmax, double ymin, double ymax)
 {
 	double area;
-	_verts.clear();
+	_polys.clear();
 
 	Polygon_2D new_poly;
 	boost::geometry::append(new_poly, Point_2D(xmin, ymin));
@@ -27,9 +27,7 @@ void GridCell::set_vertices(double xmin, double xmax, double ymin, double ymax)
 	boost::geometry::append(new_poly, Point_2D(xmin, ymin));
     boost::geometry::correct(new_poly);
 
-    boost::geometry::assign(_original, new_poly);
-
-    _verts.push_back(new_poly);
+    _polys.push_back(new_poly);
 	area = boost::geometry::area(new_poly);
 	_area = fabs(area);
 	_max_area = _area;
@@ -41,46 +39,26 @@ double GridCell::intersect(const Polygon_2D poly)
 		   intersected_area,
            geo_area;
 
-	_diffs.clear();
+	std::vector<Polygon_2D> diffs;
 	
 	std::vector<Polygon_2D>::const_iterator i;
 
     // Do the difference
-	for(i = _verts.begin(); i != _verts.end(); ++i) {
-		boost::geometry::difference((*i), poly, _diffs);
+	for(i = _polys.begin(); i != _polys.end(); ++i) {
+		boost::geometry::difference((*i), poly, diffs);
 	}
-	_verts.clear();
+	_polys.clear();
 	
-	for(i = _diffs.begin(); i != _diffs.end(); i++) {
-		_verts.push_back(*i);
+	for(i = diffs.begin(); i != diffs.end(); i++) {
+		_polys.push_back(*i);
         geo_area = boost::geometry::area(*i);
 		area += fabs(geo_area);
 	}
-
-
 	intersected_area = _area - area;
-    //if(intersected_area < 0) {
-    //    std::cout << intersected_area << std::endl;
-    //    std::cout << "Size: " << _verts.size() << std::endl;
-    //    std::cout << "Poly 1: " << boost::geometry::dsv(_verts.front()) << std::endl;
-    //    std::cout << "Poly original: " << boost::geometry::dsv(_original) << std::endl;
-    //    std::cout << "Poly intersecting: " << boost::geometry::dsv(poly) << std::endl;
-    //}
 	_area = area;
 	return intersected_area/_max_area;
 
 }
-
-double GridCell::get_area()
-{
-	return _area;
-}
-
-double GridCell::get_max_area()
-{
-	return _max_area;
-}
-
 
 double GridCell::get_area_ratio()
 {
@@ -98,9 +76,6 @@ Polygon::Polygon(double* x, double* y, int n, std::complex<double> mat)
         boost::geometry::append(_verts, boost::geometry::make<Point_2D>(x[i], y[i]));
     }
 
-    // update the bounding box
-    boost::geometry::envelope(_verts, _bbox);
-
     // correct the geometry
     boost::geometry::correct(_verts);
 }
@@ -113,9 +88,7 @@ Polygon::~Polygon()
 bool Polygon::contains_point(double x, double y)
 {
     Point_2D p(x, y);
-	bool inside = boost::geometry::within(p, _verts);
-
-	return inside;
+	return boost::geometry::within(p, _verts);
 }
 
 std::complex<double> Polygon::get_material()
@@ -131,9 +104,17 @@ double Polygon::get_cell_overlap(GridCell& cell)
 /////////////////////////////////////////////////////////////////////////////////////
 // StructuredMaterial2D
 /////////////////////////////////////////////////////////////////////////////////////
-StructuredMaterial2D::StructuredMaterial2D(double w, double h, double dx, double dy) :
-	_w(w), _h(h), _dx(dx), _dy(dy)
-{}
+StructuredMaterial2D::StructuredMaterial2D(double X, double Y, double dx, double dy) :
+	_X(X), _Y(Y), _dx(dx), _dy(dy)
+{
+	// start with background material, value = 1.0
+	double background_xs[5] = {0, X, X, 0, 0};
+	double background_ys[5] = {0, 0, Y, Y, 0};
+
+	Polygon *background_poly = new Polygon(background_xs, background_ys, 5, 1.0);
+
+    //_polygons.push_back(background_poly);
+}
 
 StructuredMaterial2D::~StructuredMaterial2D() {}
 
@@ -144,9 +125,17 @@ StructuredMaterial2D::~StructuredMaterial2D() {}
  */
 void StructuredMaterial2D::add_polygon(Polygon* poly)
 {
-	std::list<Polygon*>::iterator it, insert_pos = _polygons.end();
+	// clip preceeding polygons with new polygon
+	/*
+	std::vector<Polygon_2D> diffs;
+    std::list<Polygon*>::iterator it;
+    for(it = _polygons.begin(); it != _polygons.end(); it++) {
+		boost::geometry::difference((*it)->_verts, poly, diffs);
+    }
+	*/
 
-	_polygons.insert(_polygons.begin(), poly);
+	// add new polygon to end of list
+	_polygons.push_front(poly);
 }
 
 
@@ -300,6 +289,8 @@ StructuredMaterial3D::~StructuredMaterial3D()
 
 void StructuredMaterial3D::add_polygon(Polygon* poly, double z1, double z2)
 {
+	printf("add_polygon:  mat=(%f, %f), z1=%f, z2=%f\n",
+		   poly->get_material().real(), poly->get_material().imag(), z1, z2);
     // Dummy variables
     StructuredMaterial2D* layer;
     double znew[2] = {z1, z2},
@@ -396,13 +387,13 @@ void StructuredMaterial3D::add_polygon(Polygon* poly, double z1, double z2)
         itl++;
     }
 
-    //for(itl = _layers.begin(); itl != _layers.end(); itl++) {
-    //    std::cout << std::endl;
-    //    std::list<Polygon*> polys = (*itl)->get_polygons();
+    for(itl = _layers.begin(); itl != _layers.end(); itl++) {
+        std::cout << std::endl;
+        std::list<Polygon*> polys = (*itl)->get_polygons();
 
-    //    for(auto ip = polys.begin(); ip != polys.end(); ip++)
-    //        std::cout << *ip << std::endl;
-    //}
+        for(auto ip = polys.begin(); ip != polys.end(); ip++)
+            std::cout << *ip << std::endl;
+    }
 
     // aaannnddd we're done!
 }
