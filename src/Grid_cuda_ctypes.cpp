@@ -19,6 +19,17 @@ void Polygon_delete(Polygon* poly)
 	delete poly;
 }
 
+/* for debugging only (memory leak) */
+/*
+void Polygon_get_points(Polygon* poly, double** x, double** y, int* n)
+{
+	*n = 
+	*x = new;
+	*y = new;
+		
+}
+*/
+
 /////////////////////////////////////////////////////////////////////////////////////
 // Material3D
 /////////////////////////////////////////////////////////////////////////////////////

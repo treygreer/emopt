@@ -55,7 +55,7 @@ class GridMaterial3D(object):
 
 class Polygon(object):
 
-    def __init__(self, xs, ys, layer=1, material_value=1.0):
+    def __init__(self, xs, ys, material_value=1.0):
         assert(len(xs) == len(ys))
         self._object = libGrid.Polygon_new(np.array(xs, dtype=np.float64),
                                            np.array(ys, dtype=np.float64),
@@ -243,7 +243,6 @@ class StructuredMaterial3D(Material3D, noncuda_Material3D):
         self._polygons = []
         for (poly, zmin, zmax) in poly_zspans:
             self._polygons.append(poly)
-            print(f'StructuredMaterial3D_new: polygon={poly._object}, zmin={zmin}, zmax={zmax}')
             libGrid.StructuredMaterial3D_add_polygon(self._object, poly._object,
                                                      zmin, zmax)
 

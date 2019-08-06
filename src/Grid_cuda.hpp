@@ -4,6 +4,7 @@
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/point_xy.hpp>
 #include <boost/geometry/geometries/polygon.hpp>
+#include <boost/geometry/geometries/multi_polygon.hpp>
 
 #include <cmath>
 #include <complex>
@@ -22,15 +23,13 @@
 //#define GFLOAT __float128
 //#define GFLOAT double
 
-typedef boost::geometry::model::d2::point_xy<double> Point_2D;
-typedef boost::geometry::model::polygon<Point_2D> Polygon_2D;
+typedef boost::geometry::model::d2::point_xy<double> BoostPoint;
+typedef boost::geometry::model::polygon<BoostPoint> BoostPolygon;
 using namespace Eigen;
 
 typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
 
 namespace Grid {
-
-
 
 /* A polygon which defines the boundary of an entire Yee cell or an arbitrary portion of a Yee cell.
  *
@@ -43,20 +42,20 @@ namespace Grid {
  * representation of a Yee cells.  This allows us to compute the exact overlap between a 
  * polygon which defines the material structure of the system and a given Yee cell.
  */
-class GridCell {
+	class GridCell {
 	private:
-		std::vector<Polygon_2D> _polys;
+		std::vector<BoostPolygon> _bpolys;
 
 		double _area,
-			   _max_area;
+			_max_area;
 
 	public:
 		GridCell();
 		
 		void set_vertices(double xmin, double xmax, double ymin, double ymax);
-		double intersect(const Polygon_2D poly);
+		double intersect(const BoostPolygon bpoly);
 		double get_area_ratio();		
-};
+	};
 
 /* A solid Polygon primitive.
  *
@@ -64,11 +63,10 @@ class GridCell {
  * Both concave and convex polygons are supported. The Polygon is intended to be a flexible
  * primitive that can handle both simple and complicated geometry.
  */
-class Polygon {
+	class PolyMat {
 	private:
-		std::complex<double> _mat;
-
-		Polygon_2D _verts;
+		std::complex<double> _matval;
+		BoostPolygon _bpoly;
         
 	public:
 		/* Constructor
@@ -77,30 +75,38 @@ class Polygon {
 		 * @n number of elements in x and y
 		 * @mat the complex material value
 		 */
-	    Polygon(double* x, double* y, int n, std::complex<double> mat);
+	    PolyMat(double* x, double* y, int n, std::complex<double> matval);
 
-		//- Destructor
-		~Polygon();
-		
-		/* Determine whether a point in real space is contained within the Polygon 
+		/* Constructor
+		 * @verts boost vertices
+		 * @mat the complex material value
+		 */
+	    PolyMat(BoostPolygon bpoly, std::complex<double> matval);
+
+ 		//- Destructor
+		~PolyMat();
+
+	    inline const BoostPolygon get_bpoly() { return _bpoly; };
+
+		/* Determine whether a point in real space is contained within the PolyMat 
 		 * @x the x coordinate (real space)
 		 * @y the y coordinate (real space)
-		 * @return true if the point (x,y) is contained within the Polygon. False otherwise.
+		 * @return true if the point (x,y) is contained within the PolyMat. False otherwise.
 		 */
 		bool contains_point(double x, double y);
 
-		/* Get the Polygon's material value.
+		/* Get the PolyMat's material value.
 		 * 
-		 * Note: This does not check if (x,y) is contained in the Polygon.  Use 
+		 * Note: This does not check if (x,y) is contained in the PolyMat.  Use 
 		 * <contains_point> first if that functionality is needed.
 		 *
-		 * @return the complex material value of the Polygon.
+		 * @return the complex material value of the PolyMat.
 		 */
-		std::complex<double> get_material();
+	    inline std::complex<double> get_matval() { return _matval; };
 
+	    inline double get_area() { return boost::geometry::area(_bpoly); };
 		double get_cell_overlap(GridCell& cell);
-
-};
+	};
 
 /* Material class which provides the foundation for defining the system materials/structure.
  *
@@ -108,21 +114,22 @@ class Polygon {
  * material value is returned.  This is accomplished by extending the Material class and
  * implementing the <get_value> function.
  */
-/* A flexible <Material> which consists of layerd <Polygons>.
+/* A flexible <Material> which consists of layerd <PolyMats>.
  *
- * A StructuredMaterial consists of one or more Polygons defined by the user 
+ * A StructuredMaterial consists of one or more PolyMats defined by the user 
  * which are arranged within the simulation region.  
  */
-class StructuredMaterial2D {
+	class StructuredMaterial2D {
 	private:
-		std::list<Polygon*> _polygons;
+	    boost::geometry::model::box<BoostPoint> _envelope;
+		std::list<PolyMat*> _polymats;
 
         std::complex<double> _value;
 
 		double _X,
-			   _Y,
-			   _dx,
-			   _dy;
+			_Y,
+			_dx,
+			_dy;
 	public:
 
 		/* Constructor
@@ -149,8 +156,8 @@ class StructuredMaterial2D {
 		 * <MaterialPrimitive> objects not go out of scope while the StructuredMaterial is
 		 * still in use.
 		 */
-		void add_polygon(Polygon* poly);
-        void add_polygons(std::list<Polygon*> polys);
+		void add_polymat(PolyMat* polymat);
+        void add_polymats(std::list<PolyMat*> polymats);
 
 		/* Get the complex material value at an indexed position.
 		 * @x the x index (column) of the material value
@@ -165,9 +172,10 @@ class StructuredMaterial2D {
          * @return The std::list<MaterialPrimitive*> containing the constituent
          * MaterialPrimitives
          */
-        std::list<Polygon*> get_polygons();
+        inline std::list<PolyMat*> get_polymats() { return _polymats; };
 
-};
+	    void verify_area();
+	};
 
 /* Material class which provides the foundation for defining the system materials/structure.
  *
@@ -175,58 +183,58 @@ class StructuredMaterial2D {
  * material value is returned.  This is accomplished by extending the Material class and
  * implementing the <get_value> function.
  */
-class Material3D {
+	class Material3D {
 	
-		public:
-			/* Query the material value at a point in real space.
-			 * @x The x index of the query
-			 * @y The y index of the query
-			 *
-			 * The structure of the electromagnetic system being solved is ultimately defined
-			 * in terms of spatially-dependent materials. The material is defined on a 
-			 * spatial grid which is directly compatible with finite differences.
-			 * See <StructuredMaterial> for specific implementations.
-			 *
-			 * @return the complex material at position (x,y).
-			 */
-			virtual std::complex<double> get_value(double k, double j, double i) = 0;
+	public:
+		/* Query the material value at a point in real space.
+		 * @x The x index of the query
+		 * @y The y index of the query
+		 *
+		 * The structure of the electromagnetic system being solved is ultimately defined
+		 * in terms of spatially-dependent materials. The material is defined on a 
+		 * spatial grid which is directly compatible with finite differences.
+		 * See <StructuredMaterial> for specific implementations.
+		 *
+		 * @return the complex material at position (x,y).
+		 */
+		virtual std::complex<double> get_value(double k, double j, double i) = 0;
 
-            /* Get a block of values.
-             */
-            virtual void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, 
-                                    int i1, int i2, double sx, double sy, double sz) = 0;
-			virtual ~Material3D() {};
-};
+		/* Get a block of values.
+		 */
+		virtual void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, 
+								int i1, int i2, double sx, double sy, double sz) = 0;
+		virtual ~Material3D() {};
+	};
 
 /* A 3D material distribution defined by a single constant value.
  *
  * Use this for uniform materials.
  */
-class ConstantMaterial3D : public Material3D {
-        private:
-            std::complex<double> _value;
+	class ConstantMaterial3D : public Material3D {
+	private:
+		std::complex<double> _value;
 	
-		public:
-            ConstantMaterial3D(std::complex<double> value);
+	public:
+		ConstantMaterial3D(std::complex<double> value);
 
-			/* Query the material value at a point in real space.
-             *
-             * This will always return the same value
-             *
-			 * @x The x index of the query
-			 * @y The y index of the query
-			 * @return the complex material
-			 */
-			std::complex<double> get_value(double k, double j, double i);
+		/* Query the material value at a point in real space.
+		 *
+		 * This will always return the same value
+		 *
+		 * @x The x index of the query
+		 * @y The y index of the query
+		 * @return the complex material
+		 */
+		std::complex<double> get_value(double k, double j, double i);
 
-            /* Get a block of values.
-             *
-             * This just fills the provided array with a single value
-             */
-            void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2,
-                            int i1, int i2, double sx, double sy, double sz);
+		/* Get a block of values.
+		 *
+		 * This just fills the provided array with a single value
+		 */
+		void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2,
+						int i1, int i2, double sx, double sy, double sz);
 
-}; // ConstantMaterial3D
+	}; // ConstantMaterial3D
 
 /* Define a 3D planar stack structure.
  *
@@ -236,18 +244,18 @@ class ConstantMaterial3D : public Material3D {
  * structures that have a slab-like construction (which is most common in the micro-
  * and nanoscale worlds).
  */
-class StructuredMaterial3D : public Material3D {
+	class StructuredMaterial3D : public Material3D {
 	private:
         std::list<StructuredMaterial2D*> _layers;
         std::list<double> _zs;
 
 		double _X,
-			   _Y,
-			   _Z,
-			   _dx,
-			   _dy,
-               _dz,
-               _background;
+			_Y,
+			_Z,
+			_dx,
+			_dy,
+			_dz,
+			_background;
 
 
         // cache-related parameters
@@ -289,7 +297,7 @@ class StructuredMaterial3D : public Material3D {
 		 * <MaterialPrimitive> objects not go out of scope while the StructuredMaterial is
 		 * still in use.
 		 */
-		void add_polygon(Polygon* poly, double z1, double z2);
+		void add_polymat(PolyMat* polymat, double z1, double z2);
 
 		/* Get the complex material value at an indexed position.
 		 * @x the x index (column) of the material value
@@ -299,11 +307,11 @@ class StructuredMaterial3D : public Material3D {
 		std::complex<double> get_value(double k, double j, double i);
 
         void get_values(ArrayXcd& grid, int k1, int k2, 
-                                        int j1, int j2, 
-                                        int i1, int i2, 
-                                        double sx=0, double sy=0, double sz=0);
+						int j1, int j2, 
+						int i1, int i2, 
+						double sx=0, double sy=0, double sz=0);
 
-};
+	};
 
 }; // grid namespace
 
