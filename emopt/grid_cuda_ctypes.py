@@ -24,10 +24,10 @@ c_double_p = ndpointer(np.double, ndim=1, flags='C')
 ####################################################################################
 # Polygon configuration
 ####################################################################################
-libGrid.Polygon_new.argtypes = [c_double_p, c_double_p, c_int, c_double, c_double]
-libGrid.Polygon_new.restype = c_void_p
-libGrid.Polygon_delete.argtypes = [c_void_p]
-libGrid.Polygon_delete.restype = None
+libGrid.PolyMat_new.argtypes = [c_double_p, c_double_p, c_int, c_double, c_double]
+libGrid.PolyMat_new.restype = c_void_p
+libGrid.PolyMat_delete.argtypes = [c_void_p]
+libGrid.PolyMat_delete.restype = None
 
 #####################################################################################
 # Material3D configuration 
@@ -45,6 +45,8 @@ libGrid.Material3D_get_values.restype = None
 ####################################################################################
 libGrid.ConstantMaterial3D_new.argtypes = [c_double, c_double]
 libGrid.ConstantMaterial3D_new.restype = c_void_p
+libGrid.ConstantMaterial3D_delete.argtypes = [c_void_p]
+libGrid.ConstantMaterial3D_delete.restype = None
 
 ####################################################################################
 # StructuredMaterial3D configuration
@@ -54,8 +56,8 @@ libGrid.StructuredMaterial3D_new.argtypes = [c_double, c_double, c_double,
 libGrid.StructuredMaterial3D_new.restype = c_void_p
 libGrid.StructuredMaterial3D_delete.argtypes = [c_void_p]
 libGrid.StructuredMaterial3D_delete.restype = None
-libGrid.StructuredMaterial3D_add_polygon.argtypes = [c_void_p, c_void_p,
+libGrid.StructuredMaterial3D_add_polymat.argtypes = [c_void_p, c_void_p,
                                                      c_double, c_double]
-libGrid.StructuredMaterial3D_add_polygon.restype = None
+libGrid.StructuredMaterial3D_add_polymat.restype = None
 
 

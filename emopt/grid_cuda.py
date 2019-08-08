@@ -53,17 +53,19 @@ class GridMaterial3D(object):
         return self.grid[i,j,k]
 
 
-class Polygon(object):
+class PolyMat(object):
 
     def __init__(self, xs, ys, material_value=1.0):
         assert(len(xs) == len(ys))
-        self._object = libGrid.Polygon_new(np.array(xs, dtype=np.float64),
+        self._object = libGrid.PolyMat_new(np.array(xs, dtype=np.float64),
                                            np.array(ys, dtype=np.float64),
                                            len(xs),
                                            material_value.real, material_value.imag)
+        print(f"created polygon {self._object}")
 
     def __del__(self):
-        libGrid.Polygon_delete(self._object)
+        print(f"deleting polymat {self._object}")
+        libGrid.PolyMat_delete(self._object)
 
 class Material3D(object):
     """Define a general interface for 3D Material distributions.
@@ -205,6 +207,9 @@ class ConstantMaterial3D(Material3D):
         self._material_value = value
         self._object = libGrid.ConstantMaterial3D_new(value.real, value.imag)
 
+    def __del__(self):
+        libGrid.ConstantMaterial3D_delete(self._object)
+
     @property
     def material_value(self):
         return self._material_value
@@ -234,16 +239,16 @@ class StructuredMaterial3D(Material3D, noncuda_Material3D):
         The x,y,z width of the underlying grid.
     [dx, dy, dz]: floats
         The grid spacing of the underlying grid
-    poly_zspans: list of [polygon, zmin, zmax] lists
+    polymat_zspans: list of [polymat, zmin, zmax] lists
 
     """
-    def __init__(self, XYZ, dxdydz, poly_zspans):
+    def __init__(self, XYZ, dxdydz, polymat_zspans):
         self._object = libGrid.StructuredMaterial3D_new(XYZ[0], XYZ[1], XYZ[2],
                                                         dxdydz[0], dxdydz[1], dxdydz[2])
         self._polygons = []
-        for (poly, zmin, zmax) in poly_zspans:
-            self._polygons.append(poly)
-            libGrid.StructuredMaterial3D_add_polygon(self._object, poly._object,
+        for (polymat, zmin, zmax) in polymat_zspans:
+            self._polygons.append(polymat)
+            libGrid.StructuredMaterial3D_add_polymat(self._object, polymat._object,
                                                      zmin, zmax)
 
     def __del__(self):

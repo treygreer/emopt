@@ -7,16 +7,16 @@
 // Polygon Primitives
 /////////////////////////////////////////////////////////////////////////////////////
 
-Polygon* Polygon_new(double *xs, double *ys, int n,
+PolyMat* PolyMat_new(double *xs, double *ys, int n,
 					 double material_real, double material_imag)
 {
-	return new Polygon(xs, ys, n,
+	return new PolyMat(xs, ys, n,
 					   std::complex<double>(material_real, material_imag));
 }
 
-void Polygon_delete(Polygon* poly)
+void PolyMat_delete(PolyMat* polymat)
 {
-	delete poly;
+	delete polymat;
 }
 
 /* for debugging only (memory leak) */
@@ -69,6 +69,10 @@ ConstantMaterial3D* ConstantMaterial3D_new(double real, double imag)
 {
     return new ConstantMaterial3D(std::complex<double>(real, imag));
 }
+void ConstantMaterial3D_delete(ConstantMaterial3D* cm)
+{
+    delete cm;
+}
 
 /////////////////////////////////////////////////////////////////////////////////////
 // Structured3DMaterial
@@ -84,10 +88,10 @@ void StructuredMaterial3D_delete(StructuredMaterial3D* sm)
     delete sm;
 }
 
-void StructuredMaterial3D_add_polygon(StructuredMaterial3D* sm, 
-                                      Polygon* poly, 
+void StructuredMaterial3D_add_polymat(StructuredMaterial3D* sm, 
+                                      PolyMat* polymat, 
 									  double z1, double z2)
 {
-  sm->add_polygon(poly, z1, z2);  
+  sm->add_polymat(polymat, z1, z2);  
 }
 

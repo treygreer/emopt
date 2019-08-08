@@ -10,97 +10,77 @@ using namespace Grid;
 /**************************************** Materials ****************************************/
 
 //------------------------------ MaterialPrimitives ------------------------------------/
-GridCell::GridCell()
+GridCell::GridCell(double xmin, double xmax, double ymin, double ymax)
 {
-}
-		
-void GridCell::set_vertices(double xmin, double xmax, double ymin, double ymax)
-{
-	double area;
-	_bpolys.clear();
-
-	BoostPolygon new_bpoly;
-	boost::geometry::append(new_bpoly, BoostPoint(xmin, ymin));
-	boost::geometry::append(new_bpoly, BoostPoint(xmin, ymax));
-	boost::geometry::append(new_bpoly, BoostPoint(xmax, ymax));
-	boost::geometry::append(new_bpoly, BoostPoint(xmax, ymin));
-    boost::geometry::correct(new_bpoly);
-
-    _bpolys.push_back(new_bpoly);
-	area = boost::geometry::area(new_bpoly);
-	_area = fabs(area);
-	_max_area = _area;
+	_envelope = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
+	_area = boost::geometry::area(_envelope);
 }
 
-double GridCell::intersect(const BoostPolygon bpoly)
+double GridCell::intersect_fraction(const BoostMultiPolygon bpolys)
 {
-	double area = 0.0,
-		   intersected_area,
-           geo_area;
-
-	std::vector<BoostPolygon> bdiffs;
-	
-    // Do the difference
-	for(auto bp : _bpolys) {
-		boost::geometry::difference(bp, bpoly, bdiffs);
-	}
-	_bpolys.clear();
-	
-	for(auto bd : bdiffs) {
-		_bpolys.push_back(bd);
-        geo_area = boost::geometry::area(bd);
-		area += fabs(geo_area);
-	}
-	intersected_area = _area - area;
-	_area = area;
-	return intersected_area/_max_area;
-
+	BoostMultiPolygon intersection_bpolys;
+	boost::geometry::intersection(bpolys, _envelope, intersection_bpolys);
+	double intersected_area = boost::geometry::area(intersection_bpolys);
+	return intersected_area/_area;
 }
 
-double GridCell::get_area_ratio()
-{
-	return _area/_max_area;
-}		
-
-
-//------------------------------ Polygon ------------------------------------/
+//------------------------------ PolyMat ------------------------------------/
 
 PolyMat::PolyMat(double* x, double* y, int n, std::complex<double> matval) :
 	_matval(matval)
 {
+	_bpolys.resize(1);
     for(int i = 0; i < n; i++) {
-        boost::geometry::append(_bpoly, boost::geometry::make<BoostPoint>(x[i], y[i]));
+        boost::geometry::append(_bpolys, boost::geometry::make<BoostPoint>(x[i], y[i]));
     }
 
     // correct the geometry
-    boost::geometry::correct(_bpoly);
+    boost::geometry::correct(_bpolys);
 
-	boost::geometry::model::box<BoostPoint> bbox;
-    boost::geometry::envelope(_bpoly, bbox);
+	BoostBox bbox;
+    boost::geometry::envelope(_bpolys, bbox);
 	std::cout << "new polygon "<< this << "... matval=" << matval.real() <<
 		", bbox=" << boost::geometry::dsv(bbox) <<
-		", area=" << boost::geometry::area(_bpoly) << "\n";
+		", area=" << boost::geometry::area(_bpolys) << "\n";
 }
 
-PolyMat::PolyMat(BoostPolygon bpoly, std::complex<double> matval) :
-	_matval(matval), _bpoly(bpoly)
+PolyMat::PolyMat(BoostMultiPolygon bpolys, std::complex<double> matval) :
+	_matval(matval), _bpolys(bpolys)
+{
+}
+
+PolyMat::PolyMat(PolyMat *pm) :
+	_matval(pm->_matval), _bpolys(pm->_bpolys)
 {
 }
 
 PolyMat::~PolyMat()
 {
-	_bpoly.clear();
+	std::cout << "~PolyMat " << this << "...\n";
+	_bpolys.clear();
+	std::cout << "~PolyMat " << this << " done\n";
 }
 
 bool PolyMat::contains_point(double x, double y)
 {
     BoostPoint bp(x, y);
-	return boost::geometry::within(bp, _bpoly);
+	return boost::geometry::within(bp, _bpolys);
 }
 
-double PolyMat::get_cell_overlap(GridCell& cell)
+void PolyMat::clip(BoostBox box)
 {
-	return cell.intersect(_bpoly);
+	BoostMultiPolygon clipped_bpolys;
+	boost::geometry::intersection(_bpolys, box, clipped_bpolys);
+	_bpolys.clear();
+	_bpolys = clipped_bpolys;
+}
+
+void PolyMat::subtract(BoostMultiPolygon bpolys)
+{
+	BoostMultiPolygon diff_bpolys;
+	boost::geometry::difference(_bpolys, bpolys, diff_bpolys);
+	_bpolys.clear();
+	_bpolys = diff_bpolys;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -117,58 +97,65 @@ StructuredMaterial2D::StructuredMaterial2D(double X, double Y, double dx, double
 	PolyMat *background_polymat = new PolyMat(background_xs, background_ys, 4, background_material);
 
 	// make material bounding box (useful for area assertions)
-    boost::geometry::envelope(background_polymat->get_bpoly(), _envelope);
+    boost::geometry::envelope(background_polymat->get_bpolys(), _envelope);
 
     _polymats.push_front(background_polymat);
 	std::cout << "SM2D::new  area=" << boost::geometry::area(_envelope) << " background_polymat=" << background_polymat << "\n";
 }
 
-StructuredMaterial2D::~StructuredMaterial2D() {}
+StructuredMaterial2D::~StructuredMaterial2D() {
+	std::cout << "~SM2D " << this << "...\n";
+	for (auto pm : _polymats) {
+		delete pm;
+	}
+	std::cout << "~SM2D " << this << " done\n";
+}
 
-/* It is important to the material averaging algorithm that polygons be stored in an 
- * ordered list according to their layer.  Lower layers are stored first (have priority).
- * This means that once you have added a polygon to a list, you cannot change its
- * layer!
+/* Allocate and add polymat to this 2D structured material.
  */
 void StructuredMaterial2D::add_polymat(PolyMat* polymat)
 {
-	std::list<BoostPolygon> clipped_input_bpolys;
+	PolyMat *new_polymat = new PolyMat(polymat);
+
 	// clip polymat to material envelope (useful for area assertions)
-	boost::geometry::intersection(polymat->get_bpoly(), _envelope, clipped_input_bpolys);
+	new_polymat->clip(_envelope);
 	
-	// clip preceeding polymats with new clipped polymats
-	std::list<BoostPolygon> diffs;
-	std::list<PolyMat*> new_polymats;
-	for (auto bit : clipped_input_bpolys) {
-		for (auto it : _polymats) {
-			boost::geometry::difference(it->get_bpoly(), bit, diffs);
-			for (auto dit : diffs) {
-				PolyMat *new_polymat = new PolyMat(dit, it->get_matval());
-				new_polymats.push_back(new_polymat);
-			}
+	// subtract polymat from preceeding polymats
+	for (auto pm = _polymats.begin(); pm != _polymats.end(); ) {
+		(*pm)->subtract(new_polymat->get_bpolys());
+		// remove pm if it's been clipped completely away
+		if ((*pm)->is_empty()) {
+			delete *pm;
+			pm = _polymats.erase(pm);
+		} else {
+			++pm;
 		}
 	}
-	_polymats.clear();
-	_polymats = new_polymats;
 
-	// add new polygons to list
-	for (auto bit : clipped_input_bpolys) {
-		PolyMat *new_polymat = new PolyMat(bit, polymat->get_matval());
-		_polymats.push_back(new_polymat);
-	}
+	// add new polymat to list
+	_polymats.push_back(new_polymat);
 
 	this->verify_area();
 }
 
 void StructuredMaterial2D::verify_area()
 {
+#ifndef NDEBUG
 	double total_area = 0.0;
-	for (auto poly : _polymats) {
-		double poly_area = boost::geometry::area(poly->get_bpoly());
-		assert(poly_area > 0.0);
+	for (auto polymat : _polymats) {
+		double poly_area = boost::geometry::area(polymat->get_bpolys());
+		if (poly_area < 0.0) {
+			std::cerr << "poly_area less than zero: " << poly_area << "\n";
+			exit(-1);
+		}
 		total_area += poly_area;
 	}
-	assert (total_area == boost::geometry::area(_envelop));
+	double envelope_area = boost::geometry::area(_envelope);
+	if ((fabs(total_area - envelope_area) / envelope_area) > 1e-12) {
+		std::cerr << "total_area " << total_area << " != envelope_area " << envelope_area << "\n";
+		exit(-1);
+	}
+#endif
 }
 
 void StructuredMaterial2D::add_polymats(std::list<PolyMat*> polygons)
@@ -197,69 +184,26 @@ void StructuredMaterial2D::get_values(ArrayXcd& grid, int k1, int k2, int j1, in
 // average will begin to deviate from the "correct" average
 std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 {
-	std::complex<double> val = 0.0;
-	std::list<PolyMat*>::iterator it = _polymats.begin();
-	PolyMat* poly;
-	GridCell cell;
-	
-	double xd = x*_dx, //+ _dx/2.0,
-		   yd = y*_dy; //+ _dy/2.0;
+	std::complex<double> value = 0.0;
+	GridCell cell((x-0.5)*_dx, (x+0.5)*_dx,
+				  (y-0.5)*_dy, (y+0.5)*_dy);
 
-	double xmin = xd - _dx/2.0,
-		   xmax = xd + _dx/2.0,
-		   ymin = yd - _dy/2.0,
-		   ymax = yd + _dy/2.0,
-		   overlap = 1.0;
-
-    bool contains_p1,
-         contains_p2,
-         contains_p3,
-         contains_p4;
-
-	cell.set_vertices(xmin,xmax,ymin,ymax);
-	
-	if(_polymats.size() == 0) {
-		std::cerr << "Error: StructuredMaterial list is empty." << std::endl;
-		return 0.0;
+	double fraction_sum = 0.0;
+	for (auto polymat : _polymats) {
+		double fraction = polymat->get_cell_fraction(cell);
+		fraction_sum += fraction;
+		value += polymat->get_matval() * fraction;
 	}
-
-	//std::cout << "------------------------" << std::endl;
-	while(it != _polymats.end()) {
-		poly = (*it);
+	if (fabs(fraction_sum - 1.0) > 1e-6) {
+		std::cerr << "SM2D::get_value: x=" << x << " y=" << y << " fraction_sum = " << fraction_sum << "\n";
+		std::cerr << "     envelope " << boost::geometry::dsv(cell.get_envelope()) << "\n";
+		for (auto polymat : _polymats) {
+			std::cerr << "     polymat " << polymat << " " << boost::geometry::dsv(polymat->get_bpolys()) << "\n";
+		}
+		exit(-1);
+	}
         
-        // These values are used twice, so we recompute them
-        contains_p1 = poly->contains_point(xmin,ymin);
-        contains_p2 = poly->contains_point(xmax,ymin);
-        contains_p3 = poly->contains_point(xmax,ymax);
-        contains_p4 = poly->contains_point(xmin,ymax);
-		
-		if(contains_p1 && contains_p2 &&
-		   contains_p3 && contains_p4 &&
-		   cell.get_area_ratio() == 1.0) 
-		{
-				return poly->get_matval();
-		}
-		else if(contains_p1 || contains_p2 ||
-		        contains_p3 || contains_p4) 
-		{
-			overlap = poly->get_cell_overlap(cell);
-
-			val += overlap * poly->get_matval();
-		}
-		it++;
-
-		if(cell.get_area_ratio() == 0) {
-			break;
-		}
-
-	}
-
-	// assume background has index of 1.0
-	if(cell.get_area_ratio() > 0) {
-		val += cell.get_area_ratio()*1.0;
-	}
-
-	return val;
+	return value;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -307,9 +251,11 @@ StructuredMaterial3D::StructuredMaterial3D(double X, double Y, double Z,
 // We allocate memory -- Need to free it!
 StructuredMaterial3D::~StructuredMaterial3D()
 {
-	for(auto it = _layers.begin(); it != _layers.end(); it++) {
-        delete (*it);
+	std::cout << "~SM3D " << this << "...\n";
+	for(auto layer : _layers) {
+        delete layer;
     }
+	std::cout << "~SM3D " << this << " done\n";
 }
 
 void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
@@ -415,7 +361,7 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 
 	itz=_zs.begin();
     for(itl = _layers.begin(); itl != _layers.end(); itl++) {
-        printf("layer at z=%f...\n", *itz++);
+		std::cout << "layer at z=" << *itz++ << "...\n";
         std::list<PolyMat*> polys = (*itl)->get_polymats();
 
         for(auto ip = polys.begin(); ip != polys.end(); ip++) {
@@ -423,7 +369,7 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 			//std::cout << "        " << boost::geometry::dsv((*ip)->get_bpoly()) << "\n";
 		}
     }
-    printf("...final z=%f\n", *itz);
+	std::cout << "...final z=" << *itz << "\n";
 
     // aaannnddd we're done!
 }

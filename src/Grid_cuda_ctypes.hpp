@@ -16,9 +16,9 @@ extern "C" {
 	////////////////////////////////////////////////////////////////////////////////
 	// Polygon
 	////////////////////////////////////////////////////////////////////////////////
-	Polygon* Polygon_new(double *xs, double *ys, int n,
+	PolyMat* PolyMat_new(double *xs, double *ys, int n,
 						 double material_real, double material_imag);
-	void Polygon_delete(Polygon* poly);
+	void PolyMat_delete(PolyMat* polymat);
 	//void Polygon_get_points(Polygon* poly, double** x, double** y, int* n);
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -35,13 +35,14 @@ extern "C" {
 	// ConstantMaterial3D
 	////////////////////////////////////////////////////////////////////////////////
     ConstantMaterial3D* ConstantMaterial3D_new(double real, double imag);
+	void ConstantMaterial3D_delete(ConstantMaterial3D* cm);
 
 	////////////////////////////////////////////////////////////////////////////////
 	// Structured3DMaterial
 	////////////////////////////////////////////////////////////////////////////////
     StructuredMaterial3D* StructuredMaterial3D_new(double X, double Y, double Z, double dx, double dy, double dz);
 	void StructuredMaterial3D_delete(StructuredMaterial3D* sm);
-	void StructuredMaterial3D_add_polygon(StructuredMaterial3D* sm, Polygon* poly, double z1, double z2);
+	void StructuredMaterial3D_add_polymat(StructuredMaterial3D* sm, PolyMat* polymat, double z1, double z2);
     //void StructuredMaterial3D_get_layers(StructuredMaterial3D* sm, StructuredMaterial2D* layers, double *zs, int *n);
 
     //void StructuredMaterial2D_get_polys(StructuredMaterial2D* sm2d, Polygon* polys, int *n);

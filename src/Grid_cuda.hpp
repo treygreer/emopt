@@ -1,7 +1,11 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #include <boost/geometry.hpp>
+#pragma GCC diagnostic pop
+
 #include <boost/geometry/geometries/point_xy.hpp>
 #include <boost/geometry/geometries/polygon.hpp>
 #include <boost/geometry/geometries/multi_polygon.hpp>
@@ -25,6 +29,8 @@
 
 typedef boost::geometry::model::d2::point_xy<double> BoostPoint;
 typedef boost::geometry::model::polygon<BoostPoint> BoostPolygon;
+typedef boost::geometry::model::multi_polygon<BoostPolygon> BoostMultiPolygon;
+typedef boost::geometry::model::box<BoostPoint> BoostBox;
 using namespace Eigen;
 
 typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
@@ -44,17 +50,13 @@ namespace Grid {
  */
 	class GridCell {
 	private:
-		std::vector<BoostPolygon> _bpolys;
-
-		double _area,
-			_max_area;
+	    BoostBox _envelope;
+		double _area;
 
 	public:
-		GridCell();
-		
-		void set_vertices(double xmin, double xmax, double ymin, double ymax);
-		double intersect(const BoostPolygon bpoly);
-		double get_area_ratio();		
+		GridCell(double xmin, double xmax, double ymin, double ymax);
+		double intersect_fraction(const BoostMultiPolygon bpolys);
+		inline BoostBox get_envelope() { return _envelope; };
 	};
 
 /* A solid Polygon primitive.
@@ -66,7 +68,7 @@ namespace Grid {
 	class PolyMat {
 	private:
 		std::complex<double> _matval;
-		BoostPolygon _bpoly;
+		BoostMultiPolygon _bpolys;
         
 	public:
 		/* Constructor
@@ -81,12 +83,16 @@ namespace Grid {
 		 * @verts boost vertices
 		 * @mat the complex material value
 		 */
-	    PolyMat(BoostPolygon bpoly, std::complex<double> matval);
+	    PolyMat(BoostMultiPolygon bpolys, std::complex<double> matval);
+
+		/* Copy Constructor
+		 */
+	    PolyMat(PolyMat *pm);
 
  		//- Destructor
 		~PolyMat();
 
-	    inline const BoostPolygon get_bpoly() { return _bpoly; };
+	    inline const BoostMultiPolygon get_bpolys() { return _bpolys; };
 
 		/* Determine whether a point in real space is contained within the PolyMat 
 		 * @x the x coordinate (real space)
@@ -104,8 +110,12 @@ namespace Grid {
 		 */
 	    inline std::complex<double> get_matval() { return _matval; };
 
-	    inline double get_area() { return boost::geometry::area(_bpoly); };
-		double get_cell_overlap(GridCell& cell);
+		void clip(BoostBox box);
+		void subtract(BoostMultiPolygon bpolys);
+
+	    inline double get_area() { return boost::geometry::area(_bpolys); };
+		inline double get_cell_fraction(GridCell& cell) { return cell.intersect_fraction(_bpolys); };
+		inline bool is_empty() { return boost::geometry::is_empty(_bpolys); };
 	};
 
 /* Material class which provides the foundation for defining the system materials/structure.
@@ -121,7 +131,7 @@ namespace Grid {
  */
 	class StructuredMaterial2D {
 	private:
-	    boost::geometry::model::box<BoostPoint> _envelope;
+	    BoostBox _envelope;
 		std::list<PolyMat*> _polymats;
 
         std::complex<double> _value;
