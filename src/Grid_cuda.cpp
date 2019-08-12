@@ -9,21 +9,6 @@ using namespace Grid;
 
 /**************************************** Materials ****************************************/
 
-//------------------------------ MaterialPrimitives ------------------------------------/
-GridCell::GridCell(double xmin, double xmax, double ymin, double ymax)
-{
-	_envelope = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
-	_area = boost::geometry::area(_envelope);
-}
-
-double GridCell::intersect_fraction(const BoostMultiPolygon bpolys)
-{
-	BoostMultiPolygon intersection_bpolys;
-	boost::geometry::intersection(bpolys, _envelope, intersection_bpolys);
-	double intersected_area = boost::geometry::area(intersection_bpolys);
-	return intersected_area/_area;
-}
-
 //------------------------------ PolyMat ------------------------------------/
 
 PolyMat::PolyMat(double* x, double* y, int n, std::complex<double> matval) :
@@ -56,9 +41,7 @@ PolyMat::PolyMat(PolyMat *pm) :
 
 PolyMat::~PolyMat()
 {
-	std::cout << "~PolyMat " << this << "...\n";
 	_bpolys.clear();
-	std::cout << "~PolyMat " << this << " done\n";
 }
 
 bool PolyMat::contains_point(double x, double y)
@@ -104,11 +87,9 @@ StructuredMaterial2D::StructuredMaterial2D(double X, double Y, double dx, double
 }
 
 StructuredMaterial2D::~StructuredMaterial2D() {
-	std::cout << "~SM2D " << this << "...\n";
 	for (auto pm : _polymats) {
 		delete pm;
 	}
-	std::cout << "~SM2D " << this << " done\n";
 }
 
 /* Allocate and add polymat to this 2D structured material.
@@ -185,18 +166,23 @@ void StructuredMaterial2D::get_values(ArrayXcd& grid, int k1, int k2, int j1, in
 std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 {
 	std::complex<double> value = 0.0;
-	GridCell cell((x-0.5)*_dx, (x+0.5)*_dx,
-				  (y-0.5)*_dy, (y+0.5)*_dy);
+	double xmin=(x-0.5)*_dx, xmax=(x+0.5)*_dx;
+	double ymin=(y-0.5)*_dy, ymax=(y+0.5)*_dy;
+	BoostBox cell_envelope = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
+	double cell_area = boost::geometry::area(cell_envelope);
 
 	double fraction_sum = 0.0;
 	for (auto polymat : _polymats) {
-		double fraction = polymat->get_cell_fraction(cell);
+		BoostMultiPolygon intersection_bpolys;
+		boost::geometry::intersection(polymat->get_bpolys(), cell_envelope, intersection_bpolys);
+		double intersected_area = boost::geometry::area(intersection_bpolys);
+		double fraction = intersected_area / cell_area;
 		fraction_sum += fraction;
 		value += polymat->get_matval() * fraction;
 	}
 	if (fabs(fraction_sum - 1.0) > 1e-6) {
 		std::cerr << "SM2D::get_value: x=" << x << " y=" << y << " fraction_sum = " << fraction_sum << "\n";
-		std::cerr << "     envelope " << boost::geometry::dsv(cell.get_envelope()) << "\n";
+		std::cerr << "     envelope " << boost::geometry::dsv(cell_envelope) << "\n";
 		for (auto polymat : _polymats) {
 			std::cerr << "     polymat " << polymat << " " << boost::geometry::dsv(polymat->get_bpolys()) << "\n";
 		}
@@ -251,11 +237,9 @@ StructuredMaterial3D::StructuredMaterial3D(double X, double Y, double Z,
 // We allocate memory -- Need to free it!
 StructuredMaterial3D::~StructuredMaterial3D()
 {
-	std::cout << "~SM3D " << this << "...\n";
 	for(auto layer : _layers) {
         delete layer;
     }
-	std::cout << "~SM3D " << this << " done\n";
 }
 
 void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)

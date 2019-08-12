@@ -61,10 +61,7 @@ class PolyMat(object):
                                            np.array(ys, dtype=np.float64),
                                            len(xs),
                                            material_value.real, material_value.imag)
-        print(f"created polygon {self._object}")
-
     def __del__(self):
-        print(f"deleting polymat {self._object}")
         libGrid.PolyMat_delete(self._object)
 
 class Material3D(object):

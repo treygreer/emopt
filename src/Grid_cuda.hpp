@@ -37,28 +37,6 @@ typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
 
 namespace Grid {
 
-/* A polygon which defines the boundary of an entire Yee cell or an arbitrary portion of a Yee cell.
- *
- * Although we are using a discrete grid of Yee cells, it is possible to continuously vary 
- * the material constants within this Yee cell.  We can take advantage of this fact by
- * smoothing our grid in such a way that our matrix A changes continously with perturbations to
- * the system geometry.
- *
- * In order to make this smoothing accurate, it is convenient to maintain a true geometric 
- * representation of a Yee cells.  This allows us to compute the exact overlap between a 
- * polygon which defines the material structure of the system and a given Yee cell.
- */
-	class GridCell {
-	private:
-	    BoostBox _envelope;
-		double _area;
-
-	public:
-		GridCell(double xmin, double xmax, double ymin, double ymax);
-		double intersect_fraction(const BoostMultiPolygon bpolys);
-		inline BoostBox get_envelope() { return _envelope; };
-	};
-
 /* A solid Polygon primitive.
  *
  * A Polygon is defined by a list of points specified in clockwise or counterclockwise order.
@@ -114,7 +92,6 @@ namespace Grid {
 		void subtract(BoostMultiPolygon bpolys);
 
 	    inline double get_area() { return boost::geometry::area(_bpolys); };
-		inline double get_cell_fraction(GridCell& cell) { return cell.intersect_fraction(_bpolys); };
 		inline bool is_empty() { return boost::geometry::is_empty(_bpolys); };
 	};
 
