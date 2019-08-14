@@ -7,6 +7,116 @@
 
 using namespace Grid;
 
+class Line {
+private:
+	double _a;
+	double _b;
+	double _c;
+public:
+	Line(BoostPoint p1, BoostPoint p2) {
+		_a = p2.y() - p1.y();
+		_b = p1.x() - p2.x();
+		_c = p2.x()*p1.y() - p1.x()*p2.y();
+	}
+
+	bool point_inside(BoostPoint p) {
+        return _a*p.x() + _b*p.y() + _c >= 0.0;
+	}
+
+	bool intersect(const Line l, BoostPoint *p) {
+		double ap = _b*l._c - l._b*_c;
+		double bp = l._a*_c - _a*l._c;
+		double cp = _a*l._b - l._a*_b;
+		if (cp != 0) {
+			p->x(ap/cp);
+			p->y(bp/cp);
+			return true;
+		} else {
+			p->x(NAN);
+			p->y(NAN);
+			return false;
+		}
+	}
+};
+
+double trapezoid_box_intersection_area(const BoostRing trapezoid, const BoostBox box)
+{
+	//std::cerr << "trap box intersection area: \n";
+	//std::cerr << "   trapezoid:  " << bg::wkt(trapezoid) << "\n";
+	//std::cerr << "   box:  " << bg::wkt(box) << "\n";
+	BoostRing box_ring;
+	bg::convert(box, box_ring);
+	
+    // from https://en.wikipedia.org/wiki/Sutherland-Hodgman_algorithm
+	BoostRing output_ring;
+	bg::assign(output_ring, trapezoid);
+	for (auto clip_seg=bg::segments_begin(box_ring); clip_seg!=bg::segments_end(box_ring); ++clip_seg) {
+		Line clip_line(*(clip_seg->first), *(clip_seg->second));
+		BoostRing input_ring;
+		bg::assign(input_ring, output_ring);
+		//std::cerr << "       clip_seg:  " << bg::wkt(*clip_seg) << "\n";
+		//std::cerr << "       input_ring:  " << bg::wkt(input_ring) << "\n";
+		output_ring.clear();
+		for (auto input_seg=bg::segments_begin(input_ring); input_seg!=bg::segments_end(input_ring); ++input_seg) {
+			BoostPoint prev_point = *(input_seg->first);
+			BoostPoint current_point = *(input_seg->second);
+			Line input_line(prev_point, current_point);
+			BoostPoint intersecting_point;
+			clip_line.intersect(input_line, &intersecting_point);
+			//std::cerr << "           input_seg:  " << bg::wkt(*input_seg) << "\n";
+			//std::cerr << "           prev_point:  " << bg::wkt(prev_point) << " inside=" << clip_line.point_inside(prev_point) << "\n";
+			//std::cerr << "           current_point:  " << bg::wkt(current_point) << " inside=" << clip_line.point_inside(current_point) << "\n";
+			//std::cerr << "           intersecting_point:  " << bg::wkt(intersecting_point) << "\n";
+			if (clip_line.point_inside(current_point)) { 
+				if (!clip_line.point_inside(prev_point)) {
+					bg::append(output_ring, intersecting_point);
+				} 
+				bg::append(output_ring, current_point);
+			} else {
+				if (clip_line.point_inside(prev_point)) {
+					bg::append(output_ring, intersecting_point);
+				}
+			} 
+		}
+		bg::correct(output_ring);  // close ring
+	}
+	//std::cerr << "   output_ring:  " << bg::wkt(output_ring) << "\n";
+	//std::cerr << "   area = " << bg::area(output_ring) << "\n";
+	return bg::area(output_ring);
+}
+
+double ring_box_intersection_area(BoostRing ring, BoostBox box, bool debug)
+{
+	double trapezoid_area_sum = 0.0;
+	double xmin_box = bg::get<bg::min_corner,0>(box);
+	for (auto it=bg::segments_begin(ring); it!=bg::segments_end(ring); ++it) {
+		BoostPoint p0=*(it->first), p1=*(it->second);
+		double xmin_pts = std::min(bg::get<0>(p0), bg::get<0>(p1));
+		double xmin = std::min(xmin_pts, xmin_box) - 1.0;
+		double y0=bg::get<1>(p0);
+		double y1=bg::get<1>(p1);
+		BoostRing trapezoid { {xmin, y0}, p0, p1, {xmin, y1} };
+		bg::correct(trapezoid);
+		double intersection_area = trapezoid_box_intersection_area(trapezoid, box);
+		if (y0 < y1) intersection_area = -intersection_area;
+		trapezoid_area_sum += intersection_area;
+	}
+	BoostMultiPolygon intersection_bpolys;
+	bg::intersection(ring, box, intersection_bpolys);
+	double area = bg::area(intersection_bpolys);
+
+	if (debug) {
+		if ((fabs(area)>1e-12 && fabs(area-trapezoid_area_sum) / area > 1e-6) ||
+			(fabs(area)<=1e-12 && fabs(area-trapezoid_area_sum) > 1e-6))
+		{
+			std::cerr << "area=" << area << "  trapezoid_area_sum=" << trapezoid_area_sum << "\n";
+			std::cerr << bg::wkt(ring) << "\n";
+			std::cerr << bg::wkt(box) << "\n";
+		}
+	}
+	return trapezoid_area_sum;
+}
+
 /**************************************** Materials ****************************************/
 
 //------------------------------ PolyMat ------------------------------------/
@@ -16,17 +126,17 @@ PolyMat::PolyMat(double* x, double* y, int n, std::complex<double> matval) :
 {
 	_bpolys.resize(1);
     for(int i = 0; i < n; i++) {
-        boost::geometry::append(_bpolys, boost::geometry::make<BoostPoint>(x[i], y[i]));
+        bg::append(_bpolys, bg::make<BoostPoint>(x[i], y[i]));
     }
 
     // correct the geometry
-    boost::geometry::correct(_bpolys);
+    bg::correct(_bpolys);
 
 	BoostBox bbox;
-    boost::geometry::envelope(_bpolys, bbox);
+    bg::envelope(_bpolys, bbox);
 	std::cout << "new polygon "<< this << "... matval=" << matval.real() <<
-		", bbox=" << boost::geometry::dsv(bbox) <<
-		", area=" << boost::geometry::area(_bpolys) << "\n";
+		", bbox=" << bg::wkt(bbox) <<
+		", area=" << bg::area(_bpolys) << "\n";
 }
 
 PolyMat::PolyMat(BoostMultiPolygon bpolys, std::complex<double> matval) :
@@ -47,13 +157,13 @@ PolyMat::~PolyMat()
 bool PolyMat::contains_point(double x, double y)
 {
     BoostPoint bp(x, y);
-	return boost::geometry::within(bp, _bpolys);
+	return bg::within(bp, _bpolys);
 }
 
 void PolyMat::clip(BoostBox box)
 {
 	BoostMultiPolygon clipped_bpolys;
-	boost::geometry::intersection(_bpolys, box, clipped_bpolys);
+	bg::intersection(_bpolys, box, clipped_bpolys);
 	_bpolys.clear();
 	_bpolys = clipped_bpolys;
 }
@@ -61,7 +171,7 @@ void PolyMat::clip(BoostBox box)
 void PolyMat::subtract(BoostMultiPolygon bpolys)
 {
 	BoostMultiPolygon diff_bpolys;
-	boost::geometry::difference(_bpolys, bpolys, diff_bpolys);
+	bg::difference(_bpolys, bpolys, diff_bpolys);
 	_bpolys.clear();
 	_bpolys = diff_bpolys;
 }
@@ -80,10 +190,10 @@ StructuredMaterial2D::StructuredMaterial2D(double X, double Y, double dx, double
 	PolyMat *background_polymat = new PolyMat(background_xs, background_ys, 4, background_material);
 
 	// make material bounding box (useful for area assertions)
-    boost::geometry::envelope(background_polymat->get_bpolys(), _envelope);
+    bg::envelope(background_polymat->get_bpolys(), _envelope);
 
     _polymats.push_front(background_polymat);
-	std::cout << "SM2D::new  area=" << boost::geometry::area(_envelope) << " background_polymat=" << background_polymat << "\n";
+	std::cout << "SM2D::new  area=" << bg::area(_envelope) << " background_polymat=" << background_polymat << "\n";
 }
 
 StructuredMaterial2D::~StructuredMaterial2D() {
@@ -121,22 +231,26 @@ void StructuredMaterial2D::add_polymat(PolyMat* polymat)
 
 void StructuredMaterial2D::verify_area()
 {
-#ifndef NDEBUG
 	double total_area = 0.0;
+	_polys_valid = true;
 	for (auto polymat : _polymats) {
-		double poly_area = boost::geometry::area(polymat->get_bpolys());
+		const BoostMultiPolygon bpolys = polymat->get_bpolys();
+		if (!bg::is_valid(bpolys)) {
+			_polys_valid = false;
+			//std::cerr << "WARNING: multi_polygon not valid: " << bg::wkt(bpolys) << "\n";
+		}
+		double poly_area = bg::area(polymat->get_bpolys());
 		if (poly_area < 0.0) {
-			std::cerr << "poly_area less than zero: " << poly_area << "\n";
+			std::cerr << "ERROR: poly_area less than zero: " << poly_area << "\n";
 			exit(-1);
 		}
 		total_area += poly_area;
 	}
-	double envelope_area = boost::geometry::area(_envelope);
-	if ((fabs(total_area - envelope_area) / envelope_area) > 1e-12) {
-		std::cerr << "total_area " << total_area << " != envelope_area " << envelope_area << "\n";
+	double envelope_area = bg::area(_envelope);
+	if (_polys_valid && (fabs(total_area - envelope_area) / envelope_area) > 1e-12) {
+		std::cerr << "ERROR: total_area " << total_area << " != envelope_area " << envelope_area << "\n";
 		exit(-1);
 	}
-#endif
 }
 
 void StructuredMaterial2D::add_polymats(std::list<PolyMat*> polygons)
@@ -168,23 +282,30 @@ std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 	std::complex<double> value = 0.0;
 	double xmin=(x-0.5)*_dx, xmax=(x+0.5)*_dx;
 	double ymin=(y-0.5)*_dy, ymax=(y+0.5)*_dy;
-	BoostBox cell_envelope = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
-	double cell_area = boost::geometry::area(cell_envelope);
+	BoostBox cell_bbox = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
+	double inv_cell_area = 1.0 / bg::area(cell_bbox);
 
 	double fraction_sum = 0.0;
 	for (auto polymat : _polymats) {
-		BoostMultiPolygon intersection_bpolys;
-		boost::geometry::intersection(polymat->get_bpolys(), cell_envelope, intersection_bpolys);
-		double intersected_area = boost::geometry::area(intersection_bpolys);
-		double fraction = intersected_area / cell_area;
-		fraction_sum += fraction;
-		value += polymat->get_matval() * fraction;
+		for (auto bpoly : polymat->get_bpolys()) {
+			double outer_fraction = inv_cell_area * ring_box_intersection_area(bpoly.outer(), cell_bbox,
+				_polys_valid);
+			fraction_sum += outer_fraction; // for debugging
+			value += polymat->get_matval() * outer_fraction;
+
+			for (auto inner_ring : bpoly.inners()) {
+				double inner_fraction = inv_cell_area * ring_box_intersection_area(inner_ring, cell_bbox,
+					_polys_valid);
+				fraction_sum -= inner_fraction; // for debugging
+				value -= polymat->get_matval() * inner_fraction;
+			}
+		}
 	}
-	if (fabs(fraction_sum - 1.0) > 1e-6) {
-		std::cerr << "SM2D::get_value: x=" << x << " y=" << y << " fraction_sum = " << fraction_sum << "\n";
-		std::cerr << "     envelope " << boost::geometry::dsv(cell_envelope) << "\n";
+	if (_polys_valid && fabs(fraction_sum - 1.0) > 1e-6) {
+		std::cerr << "ERROR SM2D::get_value: x=" << x << " y=" << y << " fraction_sum = " << fraction_sum << "\n";
+		std::cerr << "     cell_bbox " << bg::wkt(cell_bbox) << "\n";
 		for (auto polymat : _polymats) {
-			std::cerr << "     polymat " << polymat << " " << boost::geometry::dsv(polymat->get_bpolys()) << "\n";
+			std::cerr << "     polymat " << polymat << " " << bg::wkt(polymat->get_bpolys()) << "\n";
 		}
 		exit(-1);
 	}
@@ -350,7 +471,7 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 
         for(auto ip = polys.begin(); ip != polys.end(); ip++) {
             std::cout << "   " << *ip << "  area=" << (*ip)->get_area() << " mat=" << (*ip)->get_matval().real() << "\n";
-			//std::cout << "        " << boost::geometry::dsv((*ip)->get_bpoly()) << "\n";
+			//std::cout << "        " << bg::wkt((*ip)->get_bpoly()) << "\n";
 		}
     }
 	std::cout << "...final z=" << *itz << "\n";

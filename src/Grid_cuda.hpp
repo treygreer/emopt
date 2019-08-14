@@ -27,10 +27,13 @@
 //#define GFLOAT __float128
 //#define GFLOAT double
 
-typedef boost::geometry::model::d2::point_xy<double> BoostPoint;
-typedef boost::geometry::model::polygon<BoostPoint> BoostPolygon;
-typedef boost::geometry::model::multi_polygon<BoostPolygon> BoostMultiPolygon;
-typedef boost::geometry::model::box<BoostPoint> BoostBox;
+namespace bg = ::boost::geometry;
+typedef bg::model::d2::point_xy<double> BoostPoint;
+typedef bg::model::polygon<BoostPoint> BoostPolygon;
+typedef bg::model::multi_polygon<BoostPolygon> BoostMultiPolygon;
+typedef bg::model::ring<BoostPoint> BoostRing;
+typedef bg::model::box<BoostPoint> BoostBox;
+typedef bg::model::segment<BoostPoint> BoostSegment;
 using namespace Eigen;
 
 typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
@@ -91,8 +94,8 @@ namespace Grid {
 		void clip(BoostBox box);
 		void subtract(BoostMultiPolygon bpolys);
 
-	    inline double get_area() { return boost::geometry::area(_bpolys); };
-		inline bool is_empty() { return boost::geometry::is_empty(_bpolys); };
+	    inline double get_area() { return bg::area(_bpolys); };
+		inline bool is_empty() { return bg::is_empty(_bpolys); };
 	};
 
 /* Material class which provides the foundation for defining the system materials/structure.
@@ -110,6 +113,7 @@ namespace Grid {
 	private:
 	    BoostBox _envelope;
 		std::list<PolyMat*> _polymats;
+		bool _polys_valid;  // used to condition area-based error reporting
 
         std::complex<double> _value;
 
