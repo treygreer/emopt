@@ -101,20 +101,21 @@ double ring_box_intersection_area(BoostRing ring, BoostBox box, bool debug)
 		if (y0 < y1) intersection_area = -intersection_area;
 		trapezoid_area_sum += intersection_area;
 	}
+
 	BoostMultiPolygon intersection_bpolys;
 	bg::intersection(ring, box, intersection_bpolys);
-	double area = bg::area(intersection_bpolys);
-
-	if (debug) {
-		if ((fabs(area)>1e-12 && fabs(area-trapezoid_area_sum) / area > 1e-6) ||
-			(fabs(area)<=1e-12 && fabs(area-trapezoid_area_sum) > 1e-6))
-		{
-			std::cerr << "area=" << area << "  trapezoid_area_sum=" << trapezoid_area_sum << "\n";
-			std::cerr << bg::wkt(ring) << "\n";
-			std::cerr << bg::wkt(box) << "\n";
-		}
+	double boost_area = bg::area(intersection_bpolys);
+	if (fabs(boost_area-trapezoid_area_sum) / boost_area > 1e-12 &&
+		fabs(boost_area-trapezoid_area_sum) > 1e-12) 
+	{
+		std::cerr << "boost_area=" << boost_area << "  trapezoid_area_sum=" << trapezoid_area_sum << "\n";
+		std::cerr << "  ring: " << bg::wkt(ring) << "\n";
+		std::cerr << "  box:  " << bg::wkt(box) << "\n";
+		std::cerr << "  intersection:  " << bg::wkt(intersection_bpolys) << "\n";
+		//exit(-1);
 	}
 	return trapezoid_area_sum;
+	//return boost_area;
 }
 
 /**************************************** Materials ****************************************/
@@ -237,7 +238,7 @@ void StructuredMaterial2D::verify_area()
 		const BoostMultiPolygon bpolys = polymat->get_bpolys();
 		if (!bg::is_valid(bpolys)) {
 			_polys_valid = false;
-			//std::cerr << "WARNING: multi_polygon not valid: " << bg::wkt(bpolys) << "\n";
+			std::cerr << "WARNING: multi_polygon not valid: " << bg::wkt(bpolys) << "\n";
 		}
 		double poly_area = bg::area(polymat->get_bpolys());
 		if (poly_area < 0.0) {
@@ -273,10 +274,6 @@ void StructuredMaterial2D::get_values(ArrayXcd& grid, int k1, int k2, int j1, in
     }
 }
 
-// This attempts to compute a reasonable average of the materials in a given Yee cell
-// Note that there are a few situations where this average will not quite be what they
-// should be.  In particular, if three or more materials intersect a cell, this 
-// average will begin to deviate from the "correct" average
 std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 {
 	std::complex<double> value = 0.0;
@@ -301,7 +298,7 @@ std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 			}
 		}
 	}
-	if (_polys_valid && fabs(fraction_sum - 1.0) > 1e-6) {
+	if (_polys_valid && fabs(fraction_sum - 1.0) > 1e-12) {
 		std::cerr << "ERROR SM2D::get_value: x=" << x << " y=" << y << " fraction_sum = " << fraction_sum << "\n";
 		std::cerr << "     cell_bbox " << bg::wkt(cell_bbox) << "\n";
 		for (auto polymat : _polymats) {
