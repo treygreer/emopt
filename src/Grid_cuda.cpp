@@ -155,12 +155,6 @@ PolyMat::~PolyMat()
 	_bpolys.clear();
 }
 
-bool PolyMat::contains_point(double x, double y)
-{
-    BoostPoint bp(x, y);
-	return bg::within(bp, _bpolys);
-}
-
 void PolyMat::clip(BoostBox box)
 {
 	BoostMultiPolygon clipped_bpolys;
@@ -254,10 +248,10 @@ void StructuredMaterial2D::verify_area()
 	}
 }
 
-void StructuredMaterial2D::add_polymats(std::list<PolyMat*> polygons)
+void StructuredMaterial2D::add_polymats(std::list<PolyMat*> polymats)
 {
     std::list<PolyMat*>::iterator it;
-    for (it = polygons.begin(); it != polygons.end(); it++) {
+    for (it = polymats.begin(); it != polymats.end(); it++) {
         add_polymat(*it);
     }
 }
@@ -464,9 +458,9 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 	itz=_zs.begin();
     for(itl = _layers.begin(); itl != _layers.end(); itl++) {
 		std::cout << "layer at z=" << *itz++ << "...\n";
-        std::list<PolyMat*> polys = (*itl)->get_polymats();
+        std::list<PolyMat*> polymats = (*itl)->get_polymats();
 
-        for(auto ip = polys.begin(); ip != polys.end(); ip++) {
+        for(auto ip = polymats.begin(); ip != polymats.end(); ip++) {
             std::cout << "   " << *ip << "  area=" << (*ip)->get_area() << " mat=" << (*ip)->get_matval().real() << "\n";
 			//std::cout << "        " << bg::wkt((*ip)->get_bpoly()) << "\n";
 		}

@@ -75,17 +75,9 @@ namespace Grid {
 
 	    inline const BoostMultiPolygon get_bpolys() { return _bpolys; };
 
-		/* Determine whether a point in real space is contained within the PolyMat 
-		 * @x the x coordinate (real space)
-		 * @y the y coordinate (real space)
-		 * @return true if the point (x,y) is contained within the PolyMat. False otherwise.
-		 */
-		bool contains_point(double x, double y);
-
 		/* Get the PolyMat's material value.
 		 * 
-		 * Note: This does not check if (x,y) is contained in the PolyMat.  Use 
-		 * <contains_point> first if that functionality is needed.
+		 * Note: This does not check if (x,y) is contained in the PolyMat. 
 		 *
 		 * @return the complex material value of the PolyMat.
 		 */
