@@ -66,6 +66,11 @@ void ConstantMaterial3D_delete(ConstantMaterial3D* cm)
 /////////////////////////////////////////////////////////////////////////////////////
 // Structured3DMaterial
 /////////////////////////////////////////////////////////////////////////////////////
+void StructuredMaterial3D_initialize_class()
+{
+	StructuredMaterial3D::initialize_class();
+}
+
 StructuredMaterial3D* StructuredMaterial3D_new(double X, double Y, double Z,
                                                double dx, double dy, double dz)
 {

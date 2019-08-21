@@ -51,6 +51,8 @@ libGrid.ConstantMaterial3D_delete.restype = None
 ####################################################################################
 # StructuredMaterial3D configuration
 ####################################################################################
+libGrid.StructuredMaterial3D_initialize_class.argtypes = None
+libGrid.StructuredMaterial3D_initialize_class.restype = None
 libGrid.StructuredMaterial3D_new.argtypes = [c_double, c_double, c_double,
                                              c_double, c_double, c_double]
 libGrid.StructuredMaterial3D_new.restype = c_void_p

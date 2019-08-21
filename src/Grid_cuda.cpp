@@ -249,7 +249,6 @@ void StructuredMaterial2D::finalize()
 		cuda_polymat->cpm_num_rings = cuda_total_rings - cuda_polymat->cpm_ring0_idx;
 	}
 	_cuda_num_polymats = cuda_total_polymats - _cuda_polymat0_idx;
-	std::cerr << "SM2D::finalize:  _cuda_num_polymats = " << _cuda_num_polymats << "\n";
 }
 
 void StructuredMaterial2D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, double sx, double sy)
@@ -308,13 +307,19 @@ double trapezoid_box_intersection_area(const BoostRing trapezoid, const BoostBox
 	return bg::area(output_ring);
 }
 
-double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx, double cell_x, double cell_y, bool debug)
+double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx,
+														 double x_min, double x_max,
+														 double y_min, double y_max,
+														 bool debug)
 {
-	double xmin=(cell_x-0.5)*_dx, xmax=(cell_x+0.5)*_dx;
-	double ymin=(cell_y-0.5)*_dy, ymax=(cell_y+0.5)*_dy;
 	CudaRing* cuda_ring = &cuda_rings[ring_idx];
 	int rng_num_points = cuda_ring->rng_num_points;
 	int rng_point0_idx = cuda_ring->rng_point0_idx;
+
+	/*
+	for (int pt_idx=rng_point0_idx; pt_idx-rng_point0_idx<rng_num_points; ++pt_idx) {
+		CudaPoint* cuda_point = &cuda_points[pt_idx];
+	*/
 /*
 	double trapezoid_area_sum = 0.0;
 	double xmin_box = bg::get<bg::min_corner,0>(box);
@@ -333,7 +338,7 @@ double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx, double ce
 	return trapezoid_area_sum;
 */
 
-	BoostBox cell_bbox = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
+	BoostBox cell_bbox = BoostBox(BoostPoint(x_min, y_min), BoostPoint(x_max, y_max));
 	BoostMultiPolygon intersection_bpolys;
 	BoostRing boost_ring;
 	for (int pt_idx=rng_point0_idx; pt_idx-rng_point0_idx<rng_num_points; ++pt_idx) {
@@ -358,11 +363,13 @@ double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx, double ce
 	return boost_area;
 }
 
-std::complex<double> StructuredMaterial2D::get_value(double cell_x, double cell_y)
+std::complex<double> StructuredMaterial2D::get_value(double cell_k, double cell_j)
 {
 	std::complex<double> cell_value = 0.0;
 	double inv_cell_area = 1.0 / (_dx*_dy);
 	double fraction_sum = 0.0;
+	double x_min = _dx*(cell_k-0.5), x_max = _dx*(cell_k+0.5);
+	double y_min = _dy*(cell_j-0.5), y_max = _dy*(cell_j+0.5);
 	for (int pm_idx=_cuda_polymat0_idx; pm_idx<_cuda_polymat0_idx+_cuda_num_polymats; ++pm_idx) {
 		CudaPolyMat* cuda_polymat = &cuda_polymats[pm_idx];
 		std::complex<double> material_value = cuda_polymat->cpm_matval;
@@ -371,13 +378,14 @@ std::complex<double> StructuredMaterial2D::get_value(double cell_x, double cell_
 		for (int ring_idx=ring0_idx; ring_idx-ring0_idx < num_rings; ++ring_idx) {
 			int ring_sign = cuda_rings[ring_idx].rng_sign;
 			double fraction = ring_sign * inv_cell_area *
-				ring_cell_intersection_area(ring_idx, cell_x, cell_y, _polys_valid);
+				ring_cell_intersection_area(ring_idx, x_min, x_max, y_min, y_max, _polys_valid);
 			cell_value += material_value * fraction;
 			fraction_sum += fraction; // for debugging
 		}
 	}
 	if (_polys_valid && fabs(fraction_sum - 1.0) > 1e-12) {
-		std::cerr << "ERROR SM2D::get_value: x=" << cell_x*_dx << " y=" << cell_y*_dy << " fraction_sum = " << fraction_sum << "\n";
+		std::cerr << "ERROR SM2D::get_value: x=" << _dx*cell_k << " y=" << cell_j*_dy << 
+			" fraction_sum = " << fraction_sum << "\n";
 		for (auto polymat : _polymats) {
 			std::cerr << "     polymat " << polymat << " " << bg::wkt(polymat->get_bpolys()) << "\n";
 		}
@@ -419,14 +427,18 @@ void ConstantMaterial3D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int 
 // StructuredMaterial3D
 ////////////////////////////////////////////////////////////////////////////////////
 
+void StructuredMaterial3D::initialize_class()
+{
+	cuda_total_polymats = 0;
+	cuda_total_rings = 0;
+	cuda_total_points = 0;
+}
+
 StructuredMaterial3D::StructuredMaterial3D(double X, double Y, double Z,
                                            double dx, double dy, double dz) :
                                            _X(X), _Y(Y), _Z(Z), 
                                            _dx(dx), _dy(dy), _dz(dz)
 {
-	cuda_total_polymats = 0;
-	cuda_total_rings = 0;
-	cuda_total_points = 0;
     _background = 1.0;
     _use_cache = true;
     _cache_active = false;

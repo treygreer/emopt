@@ -40,6 +40,7 @@ extern "C" {
 	////////////////////////////////////////////////////////////////////////////////
 	// Structured3DMaterial
 	////////////////////////////////////////////////////////////////////////////////
+	void StructuredMaterial3D_initialize_class();
     StructuredMaterial3D* StructuredMaterial3D_new(double X, double Y, double Z, double dx, double dy, double dz);
 	void StructuredMaterial3D_delete(StructuredMaterial3D* sm);
 	void StructuredMaterial3D_add_polymat(StructuredMaterial3D* sm, PolyMat* polymat, double z1, double z2);

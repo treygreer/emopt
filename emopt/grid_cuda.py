@@ -239,6 +239,10 @@ class StructuredMaterial3D(Material3D, noncuda_Material3D):
     polymat_zspans: list of [polymat, zmin, zmax] lists
 
     """
+    @classmethod
+    def initialize_class(cls):
+        libGrid.StructuredMaterial3D_initialize_class()
+
     def __init__(self, XYZ, dxdydz, polymat_zspans):
         self._object = libGrid.StructuredMaterial3D_new(XYZ[0], XYZ[1], XYZ[2],
                                                         dxdydz[0], dxdydz[1], dxdydz[2])

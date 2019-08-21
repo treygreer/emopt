@@ -164,7 +164,9 @@ namespace GridCuda {
          */
         inline std::list<PolyMat*> get_polymats() { return _polymats; };
 
-		double ring_cell_intersection_area(int ring_idx, double cell_x, double cell_y, bool debug);
+		double ring_cell_intersection_area(int ring_idx,
+										   double x_min, double x_max,
+										   double y_min, double y_max, bool debug);
 	    void verify_area();
 	};
 
@@ -259,6 +261,8 @@ namespace GridCuda {
             _cache_J,  _cache_K;
 
 	public:
+		/* Static class initializer */
+		static void initialize_class();
 
 		/* Constructor
 		 * @X the width of the simulation region in x
