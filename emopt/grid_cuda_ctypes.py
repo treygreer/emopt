@@ -54,6 +54,8 @@ libGrid.ConstantMaterial3D_delete.restype = None
 libGrid.StructuredMaterial3D_new.argtypes = [c_double, c_double, c_double,
                                              c_double, c_double, c_double]
 libGrid.StructuredMaterial3D_new.restype = c_void_p
+libGrid.StructuredMaterial3D_finalize.argtypes = [c_void_p]
+libGrid.StructuredMaterial3D_finalize.restype = None
 libGrid.StructuredMaterial3D_delete.argtypes = [c_void_p]
 libGrid.StructuredMaterial3D_delete.restype = None
 libGrid.StructuredMaterial3D_add_polymat.argtypes = [c_void_p, c_void_p,

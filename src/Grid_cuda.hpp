@@ -27,22 +27,24 @@
 //#define GFLOAT __float128
 //#define GFLOAT double
 
-namespace bg = ::boost::geometry;
-typedef bg::model::d2::point_xy<double> BoostPoint;
-typedef bg::model::polygon<BoostPoint> BoostPolygon;
-typedef bg::model::multi_polygon<BoostPolygon> BoostMultiPolygon;
-typedef bg::model::ring<BoostPoint> BoostRing;
-typedef bg::model::box<BoostPoint> BoostBox;
-typedef bg::model::segment<BoostPoint> BoostSegment;
 using namespace Eigen;
 
 typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
 
-namespace Grid {
+namespace GridCuda {
 
-/* A solid Polygon primitive.
+	namespace bg = ::boost::geometry;
+	typedef bg::model::d2::point_xy<double> BoostPoint;
+	typedef bg::model::polygon<BoostPoint> BoostPolygon;
+	typedef bg::model::multi_polygon<BoostPolygon> BoostMultiPolygon;
+	typedef bg::model::ring<BoostPoint> BoostRing;
+	typedef bg::model::box<BoostPoint> BoostBox;
+	typedef bg::model::segment<BoostPoint> BoostSegment;
+
+/* A solid Polygon-Material primitive.
  *
- * A Polygon is defined by a list of points specified in clockwise or counterclockwise order.
+ * A PolyMat is defined by a material value and a list of points specified in clockwise or
+ * counterclockwise order.
  * Both concave and convex polygons are supported. The Polygon is intended to be a flexible
  * primitive that can handle both simple and complicated geometry.
  */
@@ -113,6 +115,10 @@ namespace Grid {
 			_Y,
 			_dx,
 			_dy;
+
+		int _cuda_polymat0_idx;
+		int _cuda_num_polymats;
+
 	public:
 
 		/* Constructor
@@ -141,13 +147,14 @@ namespace Grid {
 		 */
 		void add_polymat(PolyMat* polymat);
         void add_polymats(std::list<PolyMat*> polymats);
+		void finalize();
 
 		/* Get the complex material value at an indexed position.
 		 * @x the x index (column) of the material value
 		 * @y the y index (row) of the material value
 		 * @return the complex material value at (x,y).  If no MaterialPrimitive exists at (x,y), 1.0 is returned.
 		 */
-		std::complex<double> get_value(double x, double y);
+		std::complex<double> get_value(double cell_k, double cell_j);
 
         void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, double sx, double sy);
 
@@ -157,6 +164,7 @@ namespace Grid {
          */
         inline std::list<PolyMat*> get_polymats() { return _polymats; };
 
+		double ring_cell_intersection_area(int ring_idx, double cell_x, double cell_y, bool debug);
 	    void verify_area();
 	};
 
@@ -281,6 +289,7 @@ namespace Grid {
 		 * still in use.
 		 */
 		void add_polymat(PolyMat* polymat, double z1, double z2);
+		void finalize();
 
 		/* Get the complex material value at an indexed position.
 		 * @x the x index (column) of the material value
@@ -296,6 +305,7 @@ namespace Grid {
 
 	};
 
-}; // grid namespace
+
+}; // GridCuda namespace
 
 #endif

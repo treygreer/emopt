@@ -81,6 +81,10 @@ void StructuredMaterial3D_add_polymat(StructuredMaterial3D* sm,
                                       PolyMat* polymat, 
 									  double z1, double z2)
 {
-  sm->add_polymat(polymat, z1, z2);  
+	sm->add_polymat(polymat, z1, z2);  
 }
 
+void StructuredMaterial3D_finalize(StructuredMaterial3D* sm)
+{
+	sm->finalize();
+}

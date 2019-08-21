@@ -3,7 +3,7 @@
 #ifndef __GRID_CUDA_CTYPES_HPP__
 #define __GRID_CUDA_CTYPES_HPP__
 
-using namespace Grid;
+using namespace GridCuda;
 
 // This acts as an interface to the numpy.complex64 data type
 typedef struct struct_complex64 {
@@ -43,9 +43,7 @@ extern "C" {
     StructuredMaterial3D* StructuredMaterial3D_new(double X, double Y, double Z, double dx, double dy, double dz);
 	void StructuredMaterial3D_delete(StructuredMaterial3D* sm);
 	void StructuredMaterial3D_add_polymat(StructuredMaterial3D* sm, PolyMat* polymat, double z1, double z2);
-    //void StructuredMaterial3D_get_layers(StructuredMaterial3D* sm, StructuredMaterial2D* layers, double *zs, int *n);
-
-    //void StructuredMaterial2D_get_polys(StructuredMaterial2D* sm2d, Polygon* polys, int *n);
+	void StructuredMaterial3D_finalize(StructuredMaterial3D* sm);
 }
 
 #endif

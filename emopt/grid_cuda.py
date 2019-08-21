@@ -247,6 +247,7 @@ class StructuredMaterial3D(Material3D, noncuda_Material3D):
             self._polygons.append(polymat)
             libGrid.StructuredMaterial3D_add_polymat(self._object, polymat._object,
                                                      zmin, zmax)
+            libGrid.StructuredMaterial3D_finalize(self._object)
 
     def __del__(self):
         libGrid.StructuredMaterial3D_delete(self._object)
