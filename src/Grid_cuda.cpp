@@ -313,32 +313,34 @@ double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx,
 														 bool debug)
 {
 	CudaRing* cuda_ring = &cuda_rings[ring_idx];
-	int rng_num_points = cuda_ring->rng_num_points;
-	int rng_point0_idx = cuda_ring->rng_point0_idx;
-
-	/*
-	for (int pt_idx=rng_point0_idx; pt_idx-rng_point0_idx<rng_num_points; ++pt_idx) {
-		CudaPoint* cuda_point = &cuda_points[pt_idx];
-	*/
-/*
+	int ring_num_points = cuda_ring->rng_num_points;
+	int ring_point0_idx = cuda_ring->rng_point0_idx;
 	double trapezoid_area_sum = 0.0;
-	double xmin_box = bg::get<bg::min_corner,0>(box);
-	for (auto it=bg::segments_begin(ring); it!=bg::segments_end(ring); ++it) {
-		BoostPoint p0=*(it->first), p1=*(it->second);
-		double xmin_pts = std::min(bg::get<0>(p0), bg::get<0>(p1));
-		double xmin = std::min(xmin_pts, xmin_box) - 1.0;
-		double y0=bg::get<1>(p0);
-		double y1=bg::get<1>(p1);
-		BoostRing trapezoid { {xmin, y0}, p0, p1, {xmin, y1} };
+
+	BoostBox cell_bbox = BoostBox(BoostPoint(x_min, y_min), BoostPoint(x_max, y_max));
+
+	for (int pt0_idx = ring_point0_idx + ring_num_points - 1, pt1_idx = ring_point0_idx;
+		 pt1_idx - ring_point0_idx < ring_num_points;
+		 pt0_idx = pt1_idx, pt1_idx++)
+	{
+		CudaPoint* pt0 = &cuda_points[pt0_idx];
+		CudaPoint* pt1 = &cuda_points[pt1_idx];
+		BoostPoint bp0=BoostPoint(pt0->x, pt0->y);
+		BoostPoint bp1=BoostPoint(pt1->x, pt1->y);
+		double x0=bg::get<0>(bp0);
+		double x1=bg::get<0>(bp1);
+		double y0=bg::get<1>(bp0);
+		double y1=bg::get<1>(bp1);
+		double trapezoid_xmin = std::min(x_min, std::min(x0, x1)) - _dx;
+		BoostRing trapezoid { {trapezoid_xmin, y0}, bp0, bp1, {trapezoid_xmin, y1} };
 		bg::correct(trapezoid);
-		double intersection_area = trapezoid_box_intersection_area(trapezoid, box);
+		double intersection_area = trapezoid_box_intersection_area(trapezoid, cell_bbox);
 		if (y0 < y1) intersection_area = -intersection_area;
 		trapezoid_area_sum += intersection_area;
 	}
 	return trapezoid_area_sum;
-*/
 
-	BoostBox cell_bbox = BoostBox(BoostPoint(x_min, y_min), BoostPoint(x_max, y_max));
+	/*
 	BoostMultiPolygon intersection_bpolys;
 	BoostRing boost_ring;
 	for (int pt_idx=rng_point0_idx; pt_idx-rng_point0_idx<rng_num_points; ++pt_idx) {
@@ -349,7 +351,7 @@ double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx,
 		
 	bg::intersection(boost_ring, cell_bbox, intersection_bpolys);
 	double boost_area = bg::area(intersection_bpolys);
-	/*
+
 	if (fabs(boost_area-trapezoid_area_sum) / boost_area > 1e-12 &&
 		fabs(boost_area-trapezoid_area_sum) > 1e-12) 
 	{
@@ -359,8 +361,8 @@ double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx,
 		std::cerr << "  intersection:  " << bg::wkt(intersection_bpolys) << "\n";
 		//exit(-1);
 		}
-	*/
 	return boost_area;
+	*/
 }
 
 std::complex<double> StructuredMaterial2D::get_value(double cell_k, double cell_j)
