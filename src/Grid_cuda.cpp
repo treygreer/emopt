@@ -7,37 +7,6 @@
 
 using namespace GridCuda;
 
-class Line {
-private:
-	double _a;
-	double _b;
-	double _c;
-public:
-	Line(BoostPoint p1, BoostPoint p2) {
-		_a = p2.y() - p1.y();
-		_b = p1.x() - p2.x();
-		_c = p2.x()*p1.y() - p1.x()*p2.y();
-	}
-
-	bool point_inside(BoostPoint p) {
-        return _a*p.x() + _b*p.y() + _c >= 0.0;
-	}
-
-	bool intersect(const Line l, BoostPoint *p) {
-		double ap = _b*l._c - l._b*_c;
-		double bp = l._a*_c - _a*l._c;
-		double cp = _a*l._b - l._a*_b;
-		if (cp != 0) {
-			p->x(ap/cp);
-			p->y(bp/cp);
-			return true;
-		} else {
-			p->x(NAN);
-			p->y(NAN);
-			return false;
-		}
-	}
-};
 
 /**************************************** Materials ****************************************/
 
@@ -177,18 +146,24 @@ void StructuredMaterial2D::add_polymats(std::list<PolyMat*> polymats)
     }
 }
 
-typedef struct cuda_point {
+typedef struct {
 	double x;
 	double y;
 } CudaPoint;
 
-typedef struct cuda_ring {
+std::ostream& operator<< (std::ostream& os, const CudaPoint& pt)
+{
+	os << "(" << pt.x << ", " << pt.y << ")";
+	return os;
+}
+
+typedef struct {
 	int rng_sign;
 	int rng_num_points;
 	int rng_point0_idx;
 } CudaRing;
 
-typedef struct cuda_polymat {
+typedef struct {
 	std::complex<double> cpm_matval;
 	int cpm_num_rings;
 	int cpm_ring0_idx;
@@ -206,6 +181,17 @@ CudaPoint cuda_points[CUDA_MAX_POINTS];
 int cuda_total_polymats = 0;
 int cuda_total_rings = 0;
 int cuda_total_points = 0;
+
+std::ostream& operator<< (std::ostream& os, const CudaRing& ring)
+{
+	os << "LINESTRING( ";
+	for (int i=ring.rng_point0_idx; i<ring.rng_point0_idx+ring.rng_num_points; ++i) {
+		os << cuda_points[i] << ", ";
+	}
+	os << cuda_points[ring.rng_point0_idx] << ")";
+	
+	return os;
+}
 
 void StructuredMaterial2D::finalize()
 {
@@ -261,50 +247,112 @@ void StructuredMaterial2D::get_values(ArrayXcd& grid, int k1, int k2, int j1, in
     }
 }
 
-double trapezoid_box_intersection_area(const BoostRing trapezoid, const BoostBox box)
+class Line {
+private:
+	double _a;
+	double _b;
+	double _c;
+public:
+	Line(CudaPoint* p1, CudaPoint* p2) {
+		_a = p2->y - p1->y;
+		_b = p1->x - p2->x;
+		_c = p2->x*p1->y - p1->x*p2->y;
+	}
+
+	bool point_inside(CudaPoint* p) {
+        return _a*p->x + _b*p->y + _c >= 0.0;
+	}
+
+	bool intersect(const Line l, CudaPoint* p) {
+		double ap = _b*l._c - l._b*_c;
+		double bp = l._a*_c - _a*l._c;
+		double cp = _a*l._b - l._a*_b;
+		if (cp != 0) {
+			p->x = ap/cp;
+			p->y = bp/cp;
+			return true;
+		} else {
+			p->x = NAN;
+			p->y = NAN;
+			return false;
+		}
+	}
+};
+
+// from https://en.wikipedia.org/wiki/Sutherland-Hodgman_algorithm
+double StructuredMaterial2D::trapezoid_box_intersection_area(int pt0_idx, int pt1_idx,
+															 double x_min, double x_max, double y_min, double y_max)
 {
-	//std::cerr << "trap box intersection area: \n";
-	//std::cerr << "   trapezoid:  " << bg::wkt(trapezoid) << "\n";
-	//std::cerr << "   box:  " << bg::wkt(box) << "\n";
-	BoostRing box_ring;
-	bg::convert(box, box_ring);
-	
-    // from https://en.wikipedia.org/wiki/Sutherland-Hodgman_algorithm
-	BoostRing output_ring;
-	bg::assign(output_ring, trapezoid);
-	for (auto clip_seg=bg::segments_begin(box_ring); clip_seg!=bg::segments_end(box_ring); ++clip_seg) {
-		Line clip_line(*(clip_seg->first), *(clip_seg->second));
-		BoostRing input_ring;
-		bg::assign(input_ring, output_ring);
-		//std::cerr << "       clip_seg:  " << bg::wkt(*clip_seg) << "\n";
-		//std::cerr << "       input_ring:  " << bg::wkt(input_ring) << "\n";
-		output_ring.clear();
-		for (auto input_seg=bg::segments_begin(input_ring); input_seg!=bg::segments_end(input_ring); ++input_seg) {
-			BoostPoint prev_point = *(input_seg->first);
-			BoostPoint current_point = *(input_seg->second);
-			Line input_line(prev_point, current_point);
-			BoostPoint intersecting_point;
+	const int IO_RING_N = 5;
+
+	// initialize output ring to the input trapezoid
+	double x0 = cuda_points[pt0_idx].x;
+	double y0 = cuda_points[pt0_idx].y;
+	double x1 = cuda_points[pt1_idx].x;
+	double y1 = cuda_points[pt1_idx].y;
+	double trapezoid_xmin = std::min(x_min, std::min(x0, x1)) - _dx;
+	CudaPoint output_ring[IO_RING_N] = { CudaPoint({trapezoid_xmin, y0}),
+										 cuda_points[pt0_idx],
+										 cuda_points[pt1_idx],
+										 CudaPoint({trapezoid_xmin, y1}) };
+	int output_ring_N = 4;
+
+	// initialize clip ring to {x,y} {min,max} box */
+	const int clip_ring_N = 4;
+	CudaPoint clip_ring[clip_ring_N] = { CudaPoint({x_min, y_min}),
+										 CudaPoint({x_max, y_min}),
+										 CudaPoint({x_max, y_max}),
+										 CudaPoint({x_min, y_max}) };
+
+	std::cerr << "*** intersect ********\n";
+	std::cerr << "   output ring = " << &output_ring << "\n";
+	std::cerr << "   clip ring = " << &clip_ring << "\n";
+
+	CudaPoint input_ring[IO_RING_N]; int input_ring_N;
+
+	for (auto clip_pt0 = &clip_ring[clip_ring_N-1], clip_pt1 = &clip_ring[0];
+		 clip_pt1 < &clip_ring[clip_ring_N];
+		 clip_pt0 = clip_pt1, clip_pt1++)
+	{
+		Line clip_line(clip_pt0, clip_pt1);
+		// copy output ring to input ring and clear output ring
+		for (int i=0; i<IO_RING_N; ++i) input_ring[i] = output_ring[i];
+		input_ring_N = output_ring_N;
+		output_ring_N = 0;
+
+		for (auto input_pt0 = &input_ring[input_ring_N-1], input_pt1 = &input_ring[0];
+			 input_pt1 < &input_ring[input_ring_N];
+			 input_pt0 = input_pt1, input_pt1++)
+		{		
+			Line input_line(input_pt0, input_pt1);
+			CudaPoint intersecting_point;
 			clip_line.intersect(input_line, &intersecting_point);
-			//std::cerr << "           input_seg:  " << bg::wkt(*input_seg) << "\n";
-			//std::cerr << "           prev_point:  " << bg::wkt(prev_point) << " inside=" << clip_line.point_inside(prev_point) << "\n";
-			//std::cerr << "           current_point:  " << bg::wkt(current_point) << " inside=" << clip_line.point_inside(current_point) << "\n";
-			//std::cerr << "           intersecting_point:  " << bg::wkt(intersecting_point) << "\n";
-			if (clip_line.point_inside(current_point)) { 
-				if (!clip_line.point_inside(prev_point)) {
-					bg::append(output_ring, intersecting_point);
-				} 
-				bg::append(output_ring, current_point);
+
+			if (clip_line.point_inside(input_pt1)) { 
+				if (!clip_line.point_inside(input_pt0)) {
+					output_ring[output_ring_N++] = intersecting_point;
+				}
+				output_ring[output_ring_N++] = *input_pt1;
 			} else {
-				if (clip_line.point_inside(prev_point)) {
-					bg::append(output_ring, intersecting_point);
+				if (clip_line.point_inside(input_pt0)) {
+					output_ring[output_ring_N++] = intersecting_point;
 				}
 			} 
 		}
-		bg::correct(output_ring);  // close ring
 	}
-	//std::cerr << "   output_ring:  " << bg::wkt(output_ring) << "\n";
-	//std::cerr << "   area = " << bg::area(output_ring) << "\n";
-	return bg::area(output_ring);
+	std::cerr << "   output ring = " << output_ring << "\n";
+
+	// return area of output ring
+	double output_area_2x = 0.0;
+	for (auto output_pt0 = &output_ring[output_ring_N-1], output_pt1 = &output_ring[0];
+			 output_pt1 < &output_ring[output_ring_N];
+			 output_pt0 = output_pt1, output_pt1++)
+	{
+		output_area_2x += (output_pt1->x + output_pt0->x) * (output_pt1->y - output_pt0->y);
+	}
+
+	std::cerr << "    area = " << output_area_2x * 0.5 << "\n";
+	return output_area_2x * 0.5;
 }
 
 double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx,
@@ -317,12 +365,13 @@ double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx,
 	int ring_point0_idx = cuda_ring->rng_point0_idx;
 	double trapezoid_area_sum = 0.0;
 
-	BoostBox cell_bbox = BoostBox(BoostPoint(x_min, y_min), BoostPoint(x_max, y_max));
+	//BoostBox cell_bbox = BoostBox(BoostPoint(x_min, y_min), BoostPoint(x_max, y_max));
 
 	for (int pt0_idx = ring_point0_idx + ring_num_points - 1, pt1_idx = ring_point0_idx;
 		 pt1_idx - ring_point0_idx < ring_num_points;
 		 pt0_idx = pt1_idx, pt1_idx++)
 	{
+		/*
 		CudaPoint* pt0 = &cuda_points[pt0_idx];
 		CudaPoint* pt1 = &cuda_points[pt1_idx];
 		BoostPoint bp0=BoostPoint(pt0->x, pt0->y);
@@ -336,7 +385,10 @@ double StructuredMaterial2D::ring_cell_intersection_area(int ring_idx,
 		bg::correct(trapezoid);
 		double intersection_area = trapezoid_box_intersection_area(trapezoid, cell_bbox);
 		if (y0 < y1) intersection_area = -intersection_area;
-		trapezoid_area_sum += intersection_area;
+		*/
+
+		trapezoid_area_sum += trapezoid_box_intersection_area(
+			pt0_idx, pt1_idx, x_min, x_max, y_min, y_max);
 	}
 	return trapezoid_area_sum;
 

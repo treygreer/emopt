@@ -164,6 +164,9 @@ namespace GridCuda {
          */
         inline std::list<PolyMat*> get_polymats() { return _polymats; };
 
+		double trapezoid_box_intersection_area(int pt0_idx, int pt1_idx,
+											   double x_min, double x_max, double y_min, double y_max);
+
 		double ring_cell_intersection_area(int ring_idx,
 										   double x_min, double x_max,
 										   double y_min, double y_max, bool debug);
