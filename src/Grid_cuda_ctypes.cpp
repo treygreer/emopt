@@ -1,7 +1,5 @@
 #include "Grid_cuda_ctypes.hpp"
 #include <string>
-#include <Eigen/Core>
-#include <Eigen/Dense>
 
 /////////////////////////////////////////////////////////////////////////////////////
 // Polygon Primitives
@@ -41,11 +39,12 @@ void Material3D_get_values(Material3D* mat, complex64* arr,
         Nx = k2-k1,
         Nz = i2-i1;
 
-	ArrayXcd grid(Nx*Ny*Nz);
-    mat->get_values(grid, k1, k2, j1, j2, i1, i2, xoff, yoff, zoff);
+	std::vector<std::complex<double>> grid(Nx*Ny*Nz);
+    mat->get_values(&grid[0], k1, k2, j1, j2, i1, i2, xoff, yoff, zoff);
 
+	// convert from std::complex<double> to (Numpy) complex64
     for(int i = 0; i < Nx*Ny*Nz; i++) {
-        val = grid(i);
+        val = grid[i];
         arr[i].real = std::real(val);
         arr[i].imag = std::imag(val);
     }

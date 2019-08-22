@@ -1,6 +1,5 @@
-#include <Eigen/Core>
-#include <Eigen/Dense>
 
+// ignore particular warning in boost/geometry
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #include <boost/geometry.hpp>
@@ -36,9 +35,6 @@ namespace GridCuda {
 	typedef bg::model::ring<BoostPoint> BoostRing;
 	typedef bg::model::box<BoostPoint> BoostBox;
 	typedef bg::model::segment<BoostPoint> BoostSegment;
-	using namespace Eigen;
-
-	typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
 
 /* A solid Polygon primitive.
  *
@@ -183,7 +179,7 @@ namespace GridCuda {
 
 		/* Get a block of values.
 		 */
-		virtual void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, 
+		virtual void get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2, 
 								int i1, int i2,
 								double xoff, double yoff, double zoff) = 0;
 		virtual ~Material3D() {};
@@ -214,7 +210,7 @@ namespace GridCuda {
 		 *
 		 * This just fills the provided array with a single value
 		 */
-		void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2,
+		void get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2,
 						int i1, int i2,
 						double xoff, double yoff, double zoff);
 
@@ -240,16 +236,6 @@ namespace GridCuda {
 			_dy,
 			_dz,
 			_background;
-
-
-        // cache-related parameters
-        std::list<ArrayXXcd> _cached_values;
-        std::list<ArrayXXb> _cached_flags;
-
-        bool _use_cache, _cache_active;
-        
-        int _cache_j0, _cache_k0,
-            _cache_J,  _cache_K;
 
 	public:
 
@@ -291,7 +277,7 @@ namespace GridCuda {
 		 */
 		std::complex<double> get_value(double k, double j, double i);
 
-        void get_values(ArrayXcd& grid,
+        void get_values(std::complex<double>* grid,
 						int k1, int k2, 
 						int j1, int j2, 
 						int i1, int i2, 

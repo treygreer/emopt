@@ -307,7 +307,7 @@ std::complex<double> ConstantMaterial3D::get_value(double k, double j, double i)
     return _value;
 }
 
-void ConstantMaterial3D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2,
+void ConstantMaterial3D::get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2,
                                     int i1, int i2,
 									double xoff, double yoff, double zoff)
 {
@@ -317,7 +317,7 @@ void ConstantMaterial3D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int 
     for(int i = i1; i < i2; i++) {
         for(int j = j1; j < j2; j++) {
             for(int k = k1; k < k2; k++) {
-                grid((i-i1)*N*M + (j-j1)*N + k-k1) = _value;
+                grid[(i-i1)*N*M + (j-j1)*N + k-k1] = _value;
             }
         }
     }
@@ -334,8 +334,6 @@ StructuredMaterial3D::StructuredMaterial3D(double X, double Y, double Z,
                                            _dx(dx), _dy(dy), _dz(dz),
 										   _background(background)
 {
-    _use_cache = true;
-    _cache_active = false;
 }
 
 // We allocate memory -- Need to free it!
@@ -473,17 +471,13 @@ std::complex<double> StructuredMaterial3D::get_value(double k, double j, double 
     std::list<double>::iterator itz = _zs.begin(),
                                 itz_next;
     auto itl = _layers.begin();
-    auto itcv = _cached_values.begin();
-    auto itcf = _cached_flags.begin(); 
 
-    bool cached = false;
-    int jc = 0, kc = 0;
-
-    // Check if i is below the stack
+    // Check if i is completely below the stack
     if(zmax <= *itz) {
         return _background;
     }
 
+	// handle portion partially below the stack
     if(zmax > *itz && zmin < *itz) {
         value = (*itz - zmin) / _dz * _background;
         zmin = *itz;
@@ -495,110 +489,43 @@ std::complex<double> StructuredMaterial3D::get_value(double k, double j, double 
         itz_next = std::next(itz);
         if(zmin >= *itz && zmax <= *itz_next)
         {
-            if(_use_cache and _cache_active) {
-                jc = int(j) - _cache_j0;
-                kc = int(k) - _cache_k0;
-
-                cached = (*itcf)(jc, kc);
-                if(cached) {
-                    mat_val = (*itcv)(jc, kc);
-                }
-                else {
-                    mat_val = (*itl)->get_value(k, j);
-                    (*itcv)(jc, kc) = mat_val;
-                    (*itcf)(jc, kc) = true;
-                }
-            }
-            else {
-                mat_val = (*itl)->get_value(k, j);
-            }
-      
-
+			mat_val = (*itl)->get_value(k, j);
             value += (zmax - zmin) / _dz * mat_val;
-
             return value;
         }
         else if(zmin >= *itz && zmin < *itz_next && zmax > *itz_next)
         {
-            if(_use_cache and _cache_active) {
-                jc = int(j) - _cache_j0;
-                kc = int(k) - _cache_k0;
-
-                cached = (*itcf)(jc, kc);
-                if(cached) {
-                    mat_val = (*itcv)(jc, kc);
-                }
-                else {
-                    mat_val = (*itl)->get_value(k, j);
-                    (*itcv)(jc, kc) = mat_val;
-                    (*itcf)(jc, kc) = true;
-                }
-            }
-            else {
-                mat_val = (*itl)->get_value(k, j);
-            }
-
+			mat_val = (*itl)->get_value(k, j);
             value += (*itz_next - zmin) / _dz * mat_val;
             zmin = *itz_next;
         }
 
         itl++;
         itz++;
-        itcv++;
-        itcf++;
     }
 
+	// handle portion partially above the stack
     value += (zmax - zmin) / _dz * _background;
+
     return value;
 }
 
 // Note that this takes a 1D array!
-void StructuredMaterial3D::get_values(ArrayXcd& grid,
+void StructuredMaterial3D::get_values(std::complex<double>* grid,
 									  int k1, int k2, 
 									  int j1, int j2, 
 									  int i1, int i2, 
 									  double xoff, double yoff, double zoff)
 {
-    int index = 0,
-        Nx = k2-k1,
+	int Nx = k2-k1,
         Ny = j2-j1;
-
-    int Nl, Nc;
-
-    // if caching is enabled, setup all of the cache arrays
-    // We need two arrays per slab: one to keep track of which values are already cached
-    // and one to actually store the cached values
-    if(_use_cache) {
-        Nl = _layers.size();
-        Nc = _cached_values.size();
-        if(Nc != Nl) {
-            _cached_values.resize(Nl);
-            _cached_flags.resize(Nl);
-        }
-
-        for(auto& cv : _cached_values) {
-            cv.setZero(j2-j1, k2-k1);
-        }
-        for(auto& cf : _cached_flags) {
-            cf.setZero(j2-j1, k2-k1);
-        }
-
-        _cache_j0 = int(j1+yoff);
-        _cache_k0 = int(k1+xoff);
-        _cache_J = j2-j1;
-        _cache_K = k2-k1;
-        _cache_active = true;
-
-    }
 
     for(int i = i1; i < i2; i++) {
         for(int j = j1; j < j2; j++) {
             for(int k = k1; k < k2; k++) {
-                index = (i-i1)*Nx*Ny + (j-j1)*Nx + (k-k1);
-                grid(index) = get_value(k+xoff, j+yoff, i+zoff);
+                int index = (i-i1)*Nx*Ny + (j-j1)*Nx + (k-k1);
+                grid[index] = get_value(k+xoff, j+yoff, i+zoff);
             }
         }
     }
-
-    _cache_active = false;
 }
