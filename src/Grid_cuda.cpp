@@ -257,17 +257,6 @@ void StructuredMaterial2D::add_polymats(std::list<PolyMat*> polymats)
 }
 
 
-void StructuredMaterial2D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, double sx, double sy)
-{
-    int N = k2 - k1;
-
-    for(int j = j1; j < j2; j++) {
-        for(int k = k1; k < k2; k++) {
-            grid((j-j1)*N+k-k1) = get_value(k+sx, j+sy);
-        }
-    }
-}
-
 std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 {
 	std::complex<double> value = 0.0;

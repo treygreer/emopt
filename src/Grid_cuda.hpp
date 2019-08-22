@@ -149,8 +149,6 @@ namespace Grid {
 		 */
 		std::complex<double> get_value(double x, double y);
 
-        void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, double sx, double sy);
-
         /* Get the list of primitives belonging to this StructuredMaterial
          * @return The std::list<MaterialPrimitive*> containing the constituent
          * MaterialPrimitives
