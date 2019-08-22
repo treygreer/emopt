@@ -27,18 +27,18 @@
 //#define GFLOAT __float128
 //#define GFLOAT double
 
-namespace bg = ::boost::geometry;
-typedef bg::model::d2::point_xy<double> BoostPoint;
-typedef bg::model::polygon<BoostPoint> BoostPolygon;
-typedef bg::model::multi_polygon<BoostPolygon> BoostMultiPolygon;
-typedef bg::model::ring<BoostPoint> BoostRing;
-typedef bg::model::box<BoostPoint> BoostBox;
-typedef bg::model::segment<BoostPoint> BoostSegment;
-using namespace Eigen;
+namespace GridCuda {
 
-typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
+	namespace bg = ::boost::geometry;
+	typedef bg::model::d2::point_xy<double> BoostPoint;
+	typedef bg::model::polygon<BoostPoint> BoostPolygon;
+	typedef bg::model::multi_polygon<BoostPolygon> BoostMultiPolygon;
+	typedef bg::model::ring<BoostPoint> BoostRing;
+	typedef bg::model::box<BoostPoint> BoostBox;
+	typedef bg::model::segment<BoostPoint> BoostSegment;
+	using namespace Eigen;
 
-namespace Grid {
+	typedef Array<bool, Dynamic, Dynamic> ArrayXXb;
 
 /* A solid Polygon primitive.
  *
@@ -107,12 +107,13 @@ namespace Grid {
 		std::list<PolyMat*> _polymats;
 		bool _polys_valid;  // used to condition area-based error reporting
 
-        std::complex<double> _value;
-
 		double _X,
 			_Y,
 			_dx,
 			_dy;
+
+        double _background;
+
 	public:
 
 		/* Constructor
@@ -125,7 +126,7 @@ namespace Grid {
 		 * the corresponding FDFD object.  This is essential to mapping from real space to 
 		 * array indexing when constructing the system matrix.
 		 */
-		StructuredMaterial2D(double X, double Y, double dx, double dy);
+		StructuredMaterial2D(double X, double Y, double dx, double dy, double background=1.0);
 
 		//- Destructor
 		~StructuredMaterial2D();
@@ -183,7 +184,8 @@ namespace Grid {
 		/* Get a block of values.
 		 */
 		virtual void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2, 
-								int i1, int i2, double sx, double sy, double sz) = 0;
+								int i1, int i2,
+								double xoff, double yoff, double zoff) = 0;
 		virtual ~Material3D() {};
 	};
 
@@ -213,7 +215,8 @@ namespace Grid {
 		 * This just fills the provided array with a single value
 		 */
 		void get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2,
-						int i1, int i2, double sx, double sy, double sz);
+						int i1, int i2,
+						double xoff, double yoff, double zoff);
 
 	}; // ConstantMaterial3D
 
@@ -262,7 +265,8 @@ namespace Grid {
 		 * the corresponding FDFD object.  This is essential to mapping from real space to 
 		 * array indexing when constructing the system matrix.
 		 */
-		StructuredMaterial3D(double X, double Y, double Z, double dx, double dy, double dz);
+		StructuredMaterial3D(double X, double Y, double Z, double dx, double dy, double dz,
+			double background=1.0);
 
 		//- Destructor
 		~StructuredMaterial3D();
@@ -283,17 +287,18 @@ namespace Grid {
 		/* Get the complex material value at an indexed position.
 		 * @x the x index (column) of the material value
 		 * @y the y index (row) of the material value
-		 * @return the complex material value at (x,y).  If no MaterialPrimitive exists at (x,y), 1.0 is returned.
+		 * @return the complex material value at (x,y).  If no MaterialPrimitive exists at (x,y), _background is returned.
 		 */
 		std::complex<double> get_value(double k, double j, double i);
 
-        void get_values(ArrayXcd& grid, int k1, int k2, 
+        void get_values(ArrayXcd& grid,
+						int k1, int k2, 
 						int j1, int j2, 
 						int i1, int i2, 
-						double sx=0, double sy=0, double sz=0);
+						double xoff=0, double yoff=0, double zoff=0);
 
 	};
 
-}; // grid namespace
+}; // GridCuda namespace
 
 #endif

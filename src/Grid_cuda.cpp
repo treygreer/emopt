@@ -5,7 +5,7 @@
 #include <exception>
 #include <omp.h>
 
-using namespace Grid;
+using namespace GridCuda;
 
 class Line {
 private:
@@ -174,8 +174,9 @@ void PolyMat::subtract(BoostMultiPolygon bpolys)
 /////////////////////////////////////////////////////////////////////////////////////
 // StructuredMaterial2D
 /////////////////////////////////////////////////////////////////////////////////////
-StructuredMaterial2D::StructuredMaterial2D(double X, double Y, double dx, double dy) :
-	_X(X), _Y(Y), _dx(dx), _dy(dy)
+StructuredMaterial2D::StructuredMaterial2D(double X, double Y, double dx, double dy,
+										   double background) :
+	_X(X), _Y(Y), _dx(dx), _dy(dy), _background(background)
 {
 	// start with background material, value = 1.0
 	double background_xs[5] = {-dx, X+dx, X+dx, -dx};
@@ -307,7 +308,8 @@ std::complex<double> ConstantMaterial3D::get_value(double k, double j, double i)
 }
 
 void ConstantMaterial3D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int j2,
-                                    int i1, int i2, double sx, double sy, double sz)
+                                    int i1, int i2,
+									double xoff, double yoff, double zoff)
 {
     int N = k2 - k1,
         M = j2 - j1;
@@ -326,11 +328,12 @@ void ConstantMaterial3D::get_values(ArrayXcd& grid, int k1, int k2, int j1, int 
 ////////////////////////////////////////////////////////////////////////////////////
 
 StructuredMaterial3D::StructuredMaterial3D(double X, double Y, double Z,
-                                           double dx, double dy, double dz) :
+                                           double dx, double dy, double dz,
+	                                       double background) :
                                            _X(X), _Y(Y), _Z(Z), 
-                                           _dx(dx), _dy(dy), _dz(dz)
+                                           _dx(dx), _dy(dy), _dz(dz),
+										   _background(background)
 {
-    _background = 1.0;
     _use_cache = true;
     _cache_active = false;
 }
@@ -379,7 +382,7 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
         _zs.push_back(z1);
         _zs.push_back(z2);
         
-        layer = new StructuredMaterial2D(_X, _Y, _dx, _dy);
+        layer = new StructuredMaterial2D(_X, _Y, _dx, _dy, _background);
         layer->add_polymat(polymat);
         _layers.push_back(layer);
 
@@ -410,19 +413,19 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
         // Three cases to consider: (1) point below stack (2) point above stack (3)
         // point in stack
         if(itz_ins == _zs.end()) {
-            layer = new StructuredMaterial2D(_X, _Y, _dx, _dy);
+            layer = new StructuredMaterial2D(_X, _Y, _dx, _dy, _background);
             _layers.push_front(layer);
             _zs.push_front(z);
         }
         else if(itz_ins == --_zs.end() && z != *itz_ins) {
-            layer = new StructuredMaterial2D(_X, _Y, _dx, _dy);
+            layer = new StructuredMaterial2D(_X, _Y, _dx, _dy, _background);
             _layers.push_back(layer);
             _zs.push_back(z);
         }
         else {
             // make sure the point to insert is not already in the stack
             if(z != *itz_ins) {
-                layer = new StructuredMaterial2D(_X, _Y, _dx, _dy);
+                layer = new StructuredMaterial2D(_X, _Y, _dx, _dy, _background);
                 layer->add_polymats( (*itl_ins)->get_polymats() );
                 _layers.insert(itl_ins, layer);
                 _zs.insert(++itz_ins, z);
@@ -482,7 +485,7 @@ std::complex<double> StructuredMaterial3D::get_value(double k, double j, double 
     }
 
     if(zmax > *itz && zmin < *itz) {
-        value = (*itz - zmin) / _dz * 1.0;
+        value = (*itz - zmin) / _dz * _background;
         zmin = *itz;
     }
 
@@ -545,15 +548,16 @@ std::complex<double> StructuredMaterial3D::get_value(double k, double j, double 
         itcf++;
     }
 
-    value += (zmax - zmin) / _dz * 1.0;
+    value += (zmax - zmin) / _dz * _background;
     return value;
 }
 
 // Note that this takes a 1D array!
-void StructuredMaterial3D::get_values(ArrayXcd& grid, int k1, int k2, 
-                                                      int j1, int j2, 
-                                                      int i1, int i2, 
-                                                      double sx, double sy, double sz)
+void StructuredMaterial3D::get_values(ArrayXcd& grid,
+									  int k1, int k2, 
+									  int j1, int j2, 
+									  int i1, int i2, 
+									  double xoff, double yoff, double zoff)
 {
     int index = 0,
         Nx = k2-k1,
@@ -572,15 +576,15 @@ void StructuredMaterial3D::get_values(ArrayXcd& grid, int k1, int k2,
             _cached_flags.resize(Nl);
         }
 
-        for(auto ic = _cached_values.begin(); ic != _cached_values.end(); ic++) {
-            (*ic).setZero(j2-j1, k2-k1);
+        for(auto& cv : _cached_values) {
+            cv.setZero(j2-j1, k2-k1);
         }
-        for(auto flag = _cached_flags.begin(); flag != _cached_flags.end(); flag++) {
-            (*flag).setZero(j2-j1, k2-k1);
+        for(auto& cf : _cached_flags) {
+            cf.setZero(j2-j1, k2-k1);
         }
 
-        _cache_j0 = int(j1+sy);
-        _cache_k0 = int(k1+sx);
+        _cache_j0 = int(j1+yoff);
+        _cache_k0 = int(k1+xoff);
         _cache_J = j2-j1;
         _cache_K = k2-k1;
         _cache_active = true;
@@ -591,7 +595,7 @@ void StructuredMaterial3D::get_values(ArrayXcd& grid, int k1, int k2,
         for(int j = j1; j < j2; j++) {
             for(int k = k1; k < k2; k++) {
                 index = (i-i1)*Nx*Ny + (j-j1)*Nx + (k-k1);
-                grid(index) = get_value(k+sx, j+sy, i+sz);
+                grid(index) = get_value(k+xoff, j+yoff, i+zoff);
             }
         }
     }

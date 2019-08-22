@@ -30,11 +30,11 @@ void Material3D_get_value(Material3D* mat, complex64* val, double x, double y, d
     val[0].imag = std::imag(value);
 }
 
-void Material3D_get_values(Material3D* mat, complex64* arr, int k1, int k2, 
-                                                            int j1, int j2,
-                                                            int i1, int i2,
-                                                            double sx, double sy,
-                                                            double sz)
+void Material3D_get_values(Material3D* mat, complex64* arr,
+						   int k1, int k2, 
+						   int j1, int j2,
+						   int i1, int i2,
+						   double xoff, double yoff, double zoff)
 {
     std::complex<double> val;
     int Ny = j2-j1,
@@ -42,7 +42,7 @@ void Material3D_get_values(Material3D* mat, complex64* arr, int k1, int k2,
         Nz = i2-i1;
 
 	ArrayXcd grid(Nx*Ny*Nz);
-    mat->get_values(grid, k1, k2, j1, j2, i1, i2, sx, sy, sz);
+    mat->get_values(grid, k1, k2, j1, j2, i1, i2, xoff, yoff, zoff);
 
     for(int i = 0; i < Nx*Ny*Nz; i++) {
         val = grid(i);
