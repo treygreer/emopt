@@ -309,7 +309,7 @@ std::complex<double> ConstantMaterial3D::get_value(double k, double j, double i)
 
 void ConstantMaterial3D::get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2,
                                     int i1, int i2,
-									double xoff, double yoff, double zoff)
+									double koff, double joff, double ioff)
 {
     int N = k2 - k1,
         M = j2 - j1;
@@ -462,8 +462,8 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 
 std::complex<double> StructuredMaterial3D::get_value(double k, double j, double i)
 {
-    double zmin = (i-0.5) * _dz,
-           zmax = (i+0.5) * _dz;
+    double       zmin = (i-0.5) * _dz;
+	const double zmax = (i+0.5) * _dz;
 
     std::complex<double> value = 0.0,
                          mat_val;
@@ -472,7 +472,7 @@ std::complex<double> StructuredMaterial3D::get_value(double k, double j, double 
                                 itz_next;
     auto itl = _layers.begin();
 
-    // Check if i is completely below the stack
+    // Check if (zmin,zmax) is completely below the stack
     if(zmax <= *itz) {
         return _background;
     }
@@ -487,24 +487,25 @@ std::complex<double> StructuredMaterial3D::get_value(double k, double j, double 
     {
 
         itz_next = std::next(itz);
-        if(zmin >= *itz && zmax <= *itz_next)
-        {
+		if (zmin >= *itz) 
+		{
 			mat_val = (*itl)->get_value(k, j);
-            value += (zmax - zmin) / _dz * mat_val;
-            return value;
-        }
-        else if(zmin >= *itz && zmin < *itz_next && zmax > *itz_next)
-        {
-			mat_val = (*itl)->get_value(k, j);
-            value += (*itz_next - zmin) / _dz * mat_val;
-            zmin = *itz_next;
-        }
-
+			if(zmax <= *itz_next) 
+			{
+				value += (zmax - zmin) / _dz * mat_val;
+				return value;
+			}
+			else if(zmin < *itz_next && zmax > *itz_next)
+			{
+				value += (*itz_next - zmin) / _dz * mat_val;
+				zmin = *itz_next;
+			}
+		}
         itl++;
         itz++;
-    }
+	}
 
-	// handle portion partially above the stack
+	// handle portion partially or completely above the stack
     value += (zmax - zmin) / _dz * _background;
 
     return value;
@@ -515,7 +516,7 @@ void StructuredMaterial3D::get_values(std::complex<double>* grid,
 									  int k1, int k2, 
 									  int j1, int j2, 
 									  int i1, int i2, 
-									  double xoff, double yoff, double zoff)
+									  double koff, double joff, double ioff)
 {
 	int Nx = k2-k1,
         Ny = j2-j1;
@@ -524,7 +525,7 @@ void StructuredMaterial3D::get_values(std::complex<double>* grid,
         for(int j = j1; j < j2; j++) {
             for(int k = k1; k < k2; k++) {
                 int index = (i-i1)*Nx*Ny + (j-j1)*Nx + (k-k1);
-                grid[index] = get_value(k+xoff, j+yoff, i+zoff);
+                grid[index] = get_value(k+koff, j+joff, i+ioff);
             }
         }
     }

@@ -179,9 +179,9 @@ namespace GridCuda {
 
 		/* Get a block of values.
 		 */
-		virtual void get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2, 
-								int i1, int i2,
-								double xoff, double yoff, double zoff) = 0;
+		virtual void get_values(std::complex<double>* grid,
+								int k1, int k2, int j1, int j2, int i1, int i2,
+								double koff, double joff, double ioff) = 0;
 		virtual ~Material3D() {};
 	};
 
@@ -210,9 +210,9 @@ namespace GridCuda {
 		 *
 		 * This just fills the provided array with a single value
 		 */
-		void get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2,
-						int i1, int i2,
-						double xoff, double yoff, double zoff);
+		void get_values(std::complex<double>* grid,
+						int k1, int k2, int j1, int j2, int i1, int i2,
+						double koff, double joff, double ioff);
 
 	}; // ConstantMaterial3D
 
@@ -270,18 +270,14 @@ namespace GridCuda {
 		 */
 		void add_polymat(PolyMat* polymat, double z1, double z2);
 
-		/* Get the complex material value at an indexed position.
-		 * @x the x index (column) of the material value
-		 * @y the y index (row) of the material value
-		 * @return the complex material value at (x,y).  If no MaterialPrimitive exists at (x,y), _background is returned.
+		/* Get the complex material value at the indexed positions.
+		 * @return the complex material values at (k,j,i).  If no MaterialPrimitive exists at (x,y), _background is returned.
 		 */
-		std::complex<double> get_value(double k, double j, double i);
-
         void get_values(std::complex<double>* grid,
 						int k1, int k2, 
 						int j1, int j2, 
 						int i1, int i2, 
-						double xoff=0, double yoff=0, double zoff=0);
+						double koff=0, double joff=0, double ioff=0);
 
 	};
 

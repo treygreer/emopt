@@ -29,7 +29,7 @@ extern "C" {
     void Material3D_get_values(Material3D* mat, complex64* arr, int k1, int k2,
                                                                 int j1, int j2, 
                                                                 int i1, int i2, 
-                                                                double xoff, double yoff, double zoff);
+                                                                double koff, double joff, double ioff);
 
 	////////////////////////////////////////////////////////////////////////////////
 	// ConstantMaterial3D
