@@ -97,19 +97,14 @@ namespace GridCuda {
  * A StructuredMaterial consists of one or more PolyMats defined by the user 
  * which are arranged within the simulation region.  
  */
-	class StructuredMaterial2D {
+	class StructuredMaterialLayer {
 	private:
 	    BoostBox _envelope;
 		std::list<PolyMat*> _polymats;
 		bool _polys_valid;  // used to condition area-based error reporting
 
-		double _X,
-			_Y,
-			_dx,
-			_dy;
-
-        double _background;
-
+		double _X, _Y, _dx, _dy, _background;  // from parent SM3D
+		double _z_base;  
 	public:
 
 		/* Constructor
@@ -122,10 +117,11 @@ namespace GridCuda {
 		 * the corresponding FDFD object.  This is essential to mapping from real space to 
 		 * array indexing when constructing the system matrix.
 		 */
-		StructuredMaterial2D(double X, double Y, double dx, double dy, double background=1.0);
+		StructuredMaterialLayer(double X, double Y, double dx, double dy, double background,
+			double z_base);
 
 		//- Destructor
-		~StructuredMaterial2D();
+		~StructuredMaterialLayer();
 		
 		/* Add a primitive object to the Material.
 		 * @prim the primitive to add.
@@ -153,6 +149,8 @@ namespace GridCuda {
         inline std::list<PolyMat*> get_polymats() { return _polymats; };
 
 	    void verify_area();
+
+		inline double z_base() { return _z_base; };
 	};
 
 /* Material class which provides the foundation for defining the system materials/structure.
@@ -226,8 +224,7 @@ namespace GridCuda {
  */
 	class StructuredMaterial3D : public Material3D {
 	private:
-        std::list<StructuredMaterial2D*> _layers;
-        std::list<double> _zs;
+        std::list<StructuredMaterialLayer*> _layers;
 
 		double _X,
 			_Y,
@@ -236,6 +233,9 @@ namespace GridCuda {
 			_dy,
 			_dz,
 			_background;
+
+		static constexpr double _MIN_Z = -1E300;
+		static constexpr double _MAX_Z = 1E300;
 
 	public:
 
@@ -279,6 +279,7 @@ namespace GridCuda {
 						int i1, int i2, 
 						double koff=0, double joff=0, double ioff=0);
 
+		std::complex<double> get_value(double k, double j, double i);
 	};
 
 }; // GridCuda namespace

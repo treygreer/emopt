@@ -133,9 +133,10 @@ PolyMat::PolyMat(double* x, double* y, int n, std::complex<double> matval) :
     // correct the geometry
     bg::correct(_bpolys);
 
+	// debugging output
 	BoostBox bbox;
     bg::envelope(_bpolys, bbox);
-	std::cout << "new polygon "<< this << "... matval=" << matval.real() <<
+	std::cout << "PolyMat::PolyMat "<< this << "... matval=" << matval.real() <<
 		", bbox=" << bg::wkt(bbox) <<
 		", area=" << bg::area(_bpolys) << "\n";
 }
@@ -172,11 +173,11 @@ void PolyMat::subtract(BoostMultiPolygon bpolys)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
-// StructuredMaterial2D
+// StructuredMaterialLayer
 /////////////////////////////////////////////////////////////////////////////////////
-StructuredMaterial2D::StructuredMaterial2D(double X, double Y, double dx, double dy,
-										   double background) :
-	_X(X), _Y(Y), _dx(dx), _dy(dy), _background(background)
+StructuredMaterialLayer::StructuredMaterialLayer(double X, double Y, double dx, double dy,
+												 double background, double z_base) :
+	_X(X), _Y(Y), _dx(dx), _dy(dy), _background(background), _z_base(z_base)
 {
 	// start with background material, value = 1.0
 	double background_xs[5] = {-dx, X+dx, X+dx, -dx};
@@ -189,18 +190,18 @@ StructuredMaterial2D::StructuredMaterial2D(double X, double Y, double dx, double
     bg::envelope(background_polymat->get_bpolys(), _envelope);
 
     _polymats.push_front(background_polymat);
-	std::cout << "SM2D::new  area=" << bg::area(_envelope) << " background_polymat=" << background_polymat << "\n";
+	std::cout << "SMLayer::SMLayer " << this << " area=" << bg::area(_envelope) << " background_polymat=" << background_polymat << "\n";
 }
 
-StructuredMaterial2D::~StructuredMaterial2D() {
+StructuredMaterialLayer::~StructuredMaterialLayer() {
 	for (auto pm : _polymats) {
 		delete pm;
 	}
 }
 
-/* Allocate and add polymat to this 2D structured material.
+/* Allocate and add polymat to this structured material layer.
  */
-void StructuredMaterial2D::add_polymat(PolyMat* polymat)
+void StructuredMaterialLayer::add_polymat(PolyMat* polymat)
 {
 	PolyMat *new_polymat = new PolyMat(polymat);
 
@@ -225,7 +226,7 @@ void StructuredMaterial2D::add_polymat(PolyMat* polymat)
 	this->verify_area();
 }
 
-void StructuredMaterial2D::verify_area()
+void StructuredMaterialLayer::verify_area()
 {
 	double total_area = 0.0;
 	_polys_valid = true;
@@ -249,7 +250,7 @@ void StructuredMaterial2D::verify_area()
 	}
 }
 
-void StructuredMaterial2D::add_polymats(std::list<PolyMat*> polymats)
+void StructuredMaterialLayer::add_polymats(std::list<PolyMat*> polymats)
 {
     std::list<PolyMat*>::iterator it;
     for (it = polymats.begin(); it != polymats.end(); it++) {
@@ -258,7 +259,7 @@ void StructuredMaterial2D::add_polymats(std::list<PolyMat*> polymats)
 }
 
 
-std::complex<double> StructuredMaterial2D::get_value(double x, double y)
+std::complex<double> StructuredMaterialLayer::get_value(double x, double y)
 {
 	std::complex<double> value = 0.0;
 	double xmin=(x-0.5)*_dx, xmax=(x+0.5)*_dx;
@@ -283,7 +284,7 @@ std::complex<double> StructuredMaterial2D::get_value(double x, double y)
 		}
 	}
 	if (_polys_valid && fabs(fraction_sum - 1.0) > 1e-12) {
-		std::cerr << "ERROR SM2D::get_value: x=" << x << " y=" << y << " fraction_sum = " << fraction_sum << "\n";
+		std::cerr << "ERROR SMLayer::get_value: x=" << x << " y=" << y << " fraction_sum = " << fraction_sum << "\n";
 		std::cerr << "     cell_bbox " << bg::wkt(cell_bbox) << "\n";
 		for (auto polymat : _polymats) {
 			std::cerr << "     polymat " << polymat << " " << bg::wkt(polymat->get_bpolys()) << "\n";
@@ -334,6 +335,9 @@ StructuredMaterial3D::StructuredMaterial3D(double X, double Y, double Z,
                                            _dx(dx), _dy(dy), _dz(dz),
 										   _background(background)
 {
+	// add empty StructuredMaterialLayers at z=_BOTTOM_Z and z=_TOP_Z
+	_layers.push_back(new StructuredMaterialLayer(_X, _Y, _dx, _dy, _background, _MIN_Z));
+	_layers.push_back(new StructuredMaterialLayer(_X, _Y, _dx, _dy, _background, _MAX_Z));
 }
 
 // We allocate memory -- Need to free it!
@@ -346,20 +350,14 @@ StructuredMaterial3D::~StructuredMaterial3D()
 
 void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 {
-	std::cout << "SM3D::add_polymat polymat=" << polymat <<
+	std::cerr << "SM3D::add_polymat polymat=" << polymat <<
 		", material=" << polymat->get_matval().real() <<
 		", z1=" << z1 << " z2=" << z2 << "\n";
-    // Dummy variables
-    StructuredMaterial2D* layer;
-    double znew[2] = {z1, z2},
-           z = 0;
 
-    // Get access to relevant lists
-    auto itl = _layers.begin();
-    auto itz = _zs.begin();
-    
-    std::list<StructuredMaterial2D*>::iterator itl_ins;
-    std::list<double>::iterator itz_ins;
+	std::cerr << "   initial layers = [";
+	for (auto layer : _layers)
+		std::cerr << layer << " ";
+	std::cerr << "]\n";
 
     // Make sure the layer has a thickness
     if(z1 == z2) {
@@ -375,138 +373,85 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
         return;
     }
 
-    // If this is the first addition, things are simple
-    if(itz == _zs.end()) {
-        _zs.push_back(z1);
-        _zs.push_back(z2);
-        
-        layer = new StructuredMaterial2D(_X, _Y, _dx, _dy, _background);
-        layer->add_polymat(polymat);
-        _layers.push_back(layer);
-
-        return;
-    }
-
     // now we insert the beginning and end point of the layer one at a time, breaking
     // up or inserting new layers as necessary
-    for(int i = 0; i < 2; i++) {
-        z = znew[i];
+    for(const double point_z : std::array<double,2> {z1, z2}) {
+		assert(point_z > _MIN_Z && point_z < _MAX_Z);
 
-        itz = _zs.begin();
-        itl = _layers.begin();
-        itz_ins = _zs.end();
-        itl_ins = _layers.end();
+		// figure out where the point is going to go
+		auto layer_before = _layers.begin();
+		auto layer_after = _layers.begin()++;
+		while (layer_after != _layers.end() &&
+			   point_z > (*layer_after)->z_base())
+		{
+			layer_before = layer_after++;
+		}
+		assert(point_z > (*layer_before)->z_base());
+		assert(point_z <= (*layer_after)->z_base());
 
-        // figure out where the point is going to go
-        while(itz != _zs.end()) {
-            if(z >= *itz) {
-                itz_ins = itz;
-                itl_ins = itl;
-            }
-            itz++;
-            if(itl != _layers.end())
-                itl++;
-        }
-
-        // Three cases to consider: (1) point below stack (2) point above stack (3)
-        // point in stack
-        if(itz_ins == _zs.end()) {
-            layer = new StructuredMaterial2D(_X, _Y, _dx, _dy, _background);
-            _layers.push_front(layer);
-            _zs.push_front(z);
-        }
-        else if(itz_ins == --_zs.end() && z != *itz_ins) {
-            layer = new StructuredMaterial2D(_X, _Y, _dx, _dy, _background);
-            _layers.push_back(layer);
-            _zs.push_back(z);
-        }
-        else {
-            // make sure the point to insert is not already in the stack
-            if(z != *itz_ins) {
-                layer = new StructuredMaterial2D(_X, _Y, _dx, _dy, _background);
-                layer->add_polymats( (*itl_ins)->get_polymats() );
-                _layers.insert(itl_ins, layer);
-                _zs.insert(++itz_ins, z);
-            }
-        }
+		if(point_z != (*layer_after)->z_base()) {  // if the point to insert is not already in the stack 
+			std::cerr << "  point_z=" << point_z << " layer_before=" << *layer_before << " layer_after=" << *layer_after << "\n";
+			StructuredMaterialLayer* layer = new StructuredMaterialLayer(_X, _Y, _dx, _dy, _background, point_z);
+			layer->add_polymats( (*layer_before)->get_polymats() );
+			_layers.insert(layer_after, layer);  // insert before layer_after
+		}
     }
 
     // Finally, insert the supplied PolyMat into the desired locations
-    itz = _zs.begin();
-    itl = _layers.begin();
-
-    // figure out where the point is going to go
-    while(itl != _layers.end()) {
-        z = (*itz);
+    for (auto itl : _layers) {
+        double z = itl->z_base();
         if(z >= z1 && z < z2) {
-            (*itl)->add_polymat(polymat);
+            itl->add_polymat(polymat);
         }
-        itz++;
-        itl++;
     }
 
-	itz=_zs.begin();
-    for(itl = _layers.begin(); itl != _layers.end(); itl++) {
-		std::cout << "layer at z=" << *itz++ << "...\n";
-        std::list<PolyMat*> polymats = (*itl)->get_polymats();
+	std::cout << "SM3D::add_polymat results:\n";
+    for(auto layer : _layers) {
+		std::cout << "   layer " << layer << " at z=" << layer->z_base() << "...\n";
+        std::list<PolyMat*> polymats = layer->get_polymats();
 
-        for(auto ip = polymats.begin(); ip != polymats.end(); ip++) {
-            std::cout << "   " << *ip << "  area=" << (*ip)->get_area() << " mat=" << (*ip)->get_matval().real() << "\n";
-			//std::cout << "        " << bg::wkt((*ip)->get_bpoly()) << "\n";
+        for(auto pm : layer->get_polymats()) {
+            std::cout << "       " << pm << "  area=" << pm->get_area() << " mat=" << pm->get_matval().real() << "\n";
+			std::cout << "       " << bg::wkt(pm->get_bpolys()) << "\n";
 		}
     }
-	std::cout << "...final z=" << *itz << "\n";
 
     // aaannnddd we're done!
 }
 
 std::complex<double> StructuredMaterial3D::get_value(double k, double j, double i)
 {
-    double       zmin = (i-0.5) * _dz;
-	const double zmax = (i+0.5) * _dz;
+    double       z_min = (i-0.5) * _dz;
+	const double z_max = (i+0.5) * _dz;
 
     std::complex<double> value = 0.0,
                          mat_val;
 
-    std::list<double>::iterator itz = _zs.begin(),
-                                itz_next;
-    auto itl = _layers.begin();
-
-    // Check if (zmin,zmax) is completely below the stack
-    if(zmax <= *itz) {
-        return _background;
-    }
-
-	// handle portion partially below the stack
-    if(zmax > *itz && zmin < *itz) {
-        value = (*itz - zmin) / _dz * _background;
-        zmin = *itz;
-    }
-
-    while(itl != _layers.end())
+    auto layer = _layers.begin();
+    auto layer_next = _layers.begin()++;
+    while(layer_next != _layers.end())
     {
-
-        itz_next = std::next(itz);
-		if (zmin >= *itz) 
+		double z_base = (*layer)->z_base();
+		double z_next = (*layer_next)->z_base();
+		if (z_min >= z_base) 
 		{
-			mat_val = (*itl)->get_value(k, j);
-			if(zmax <= *itz_next) 
+			mat_val = (*layer)->get_value(k, j);
+			if(z_max <= z_next) 
 			{
-				value += (zmax - zmin) / _dz * mat_val;
+				value += (z_max - z_min) / _dz * mat_val;
 				return value;
 			}
-			else if(zmin < *itz_next && zmax > *itz_next)
+			else if(z_min < z_next && z_max > z_next)
 			{
-				value += (*itz_next - zmin) / _dz * mat_val;
-				zmin = *itz_next;
+				value += (z_next - z_min) / _dz * mat_val;
+				z_min = z_next;
 			}
 		}
-        itl++;
-        itz++;
+		layer = layer_next++;
 	}
 
 	// handle portion partially or completely above the stack
-    value += (zmax - zmin) / _dz * _background;
+    value += (z_max - z_min) / _dz * _background;
 
     return value;
 }
