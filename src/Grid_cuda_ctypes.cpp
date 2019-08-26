@@ -77,7 +77,7 @@ void ConstantMaterial3D_delete(ConstantMaterial3D* cm)
 StructuredMaterial3D* StructuredMaterial3D_new(double X, double Y, double Z,
                                                double dx, double dy, double dz)
 {
-    return new StructuredMaterial3D(X, Y, Z, dx, dy ,dz);
+    return new StructuredMaterial3D(X, Y, Z, dx, dy, dz);
 }
 
 void StructuredMaterial3D_delete(StructuredMaterial3D* sm)

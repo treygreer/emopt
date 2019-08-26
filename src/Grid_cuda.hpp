@@ -170,10 +170,7 @@ namespace GridCuda {
 		 * in terms of spatially-dependent materials. The material is defined on a 
 		 * spatial grid which is directly compatible with finite differences.
 		 * See <StructuredMaterial> for specific implementations.
-		 *
-		 * @return the complex material at position (x,y).
 		 */
-		virtual std::complex<double> get_value(double k, double j, double i) = 0;
 
 		/* Get a block of values.
 		 */
@@ -193,16 +190,6 @@ namespace GridCuda {
 	
 	public:
 		ConstantMaterial3D(std::complex<double> value);
-
-		/* Query the material value at a point in real space.
-		 *
-		 * This will always return the same value
-		 *
-		 * @x The x index of the query
-		 * @y The y index of the query
-		 * @return the complex material
-		 */
-		std::complex<double> get_value(double k, double j, double i);
 
 		/* Get a block of values.
 		 *
@@ -278,8 +265,6 @@ namespace GridCuda {
 						int j1, int j2, 
 						int i1, int i2, 
 						double koff=0, double joff=0, double ioff=0);
-
-		std::complex<double> get_value(double k, double j, double i);
 	};
 
 }; // GridCuda namespace

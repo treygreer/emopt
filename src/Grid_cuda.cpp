@@ -303,11 +303,6 @@ ConstantMaterial3D::ConstantMaterial3D(std::complex<double> value)
     _value = value;
 }
 
-std::complex<double> ConstantMaterial3D::get_value(double k, double j, double i)
-{
-    return _value;
-}
-
 void ConstantMaterial3D::get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2,
                                     int i1, int i2,
 									double koff, double joff, double ioff)
@@ -419,43 +414,6 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
     // aaannnddd we're done!
 }
 
-std::complex<double> StructuredMaterial3D::get_value(double k, double j, double i)
-{
-    double       z_min = (i-0.5) * _dz;
-	const double z_max = (i+0.5) * _dz;
-
-    std::complex<double> value = 0.0,
-                         mat_val;
-
-    auto layer = _layers.begin();
-    auto layer_next = _layers.begin()++;
-    while(layer_next != _layers.end())
-    {
-		double z_base = (*layer)->z_base();
-		double z_next = (*layer_next)->z_base();
-		if (z_min >= z_base) 
-		{
-			mat_val = (*layer)->get_value(k, j);
-			if(z_max <= z_next) 
-			{
-				value += (z_max - z_min) / _dz * mat_val;
-				return value;
-			}
-			else if(z_min < z_next && z_max > z_next)
-			{
-				value += (z_next - z_min) / _dz * mat_val;
-				z_min = z_next;
-			}
-		}
-		layer = layer_next++;
-	}
-
-	// handle portion partially or completely above the stack
-    value += (z_max - z_min) / _dz * _background;
-
-    return value;
-}
-
 // Note that this takes a 1D array!
 void StructuredMaterial3D::get_values(std::complex<double>* grid,
 									  int k1, int k2, 
@@ -463,14 +421,47 @@ void StructuredMaterial3D::get_values(std::complex<double>* grid,
 									  int i1, int i2, 
 									  double koff, double joff, double ioff)
 {
-	int Nx = k2-k1,
-        Ny = j2-j1;
+	const int Nx = k2-k1, Ny = j2-j1;
 
     for(int i = i1; i < i2; i++) {
         for(int j = j1; j < j2; j++) {
             for(int k = k1; k < k2; k++) {
+
+				double       z_min = (i+ioff-0.5) * _dz;
+				const double z_max = (i+ioff+0.5) * _dz;
+
+				std::complex<double> value = 0.0,
+					mat_val;
+
+				auto layer = _layers.begin();
+				auto layer_next = _layers.begin()++;
+				while(layer_next != _layers.end())
+				{
+					double z_base = (*layer)->z_base();
+					double z_next = (*layer_next)->z_base();
+					if (z_min >= z_base) 
+					{
+						mat_val = (*layer)->get_value(k+koff, j+joff);
+						if(z_max <= z_next) 
+						{
+							value += (z_max - z_min) / _dz * mat_val;
+							break;
+						}
+						else if(z_min < z_next && z_max > z_next)
+						{
+							value += (z_next - z_min) / _dz * mat_val;
+							z_min = z_next;
+						}
+					}
+					layer = layer_next++;
+				}
+
+				// handle portion partially or completely above the stack
+				if (layer_next != _layers.end())
+					value += (z_max - z_min) / _dz * _background;
+
                 int index = (i-i1)*Nx*Ny + (j-j1)*Nx + (k-k1);
-                grid[index] = get_value(k+koff, j+joff, i+ioff);
+                grid[index] = value;
             }
         }
     }
