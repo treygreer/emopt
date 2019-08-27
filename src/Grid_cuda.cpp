@@ -85,7 +85,7 @@ double trapezoid_box_intersection_area(const BoostRing trapezoid, const BoostBox
 	return bg::area(output_ring);
 }
 
-double ring_box_intersection_area(BoostRing ring, BoostBox box, bool debug)
+double ring_box_intersection_area(BoostRing ring, BoostBox box, bool debug=false)
 {
 	double trapezoid_area_sum = 0.0;
 	double xmin_box = bg::get<bg::min_corner,0>(box);
@@ -401,27 +401,25 @@ public:
 			const int Ny = _k2 - _k1;
 			const double inv_cell_area = 1.0 / (layer->dx()*layer->dy());
 
-			for(int j = _j1; j < _j2; j++) {
-				for(int k = _k1; k < _k2; k++) {
+			for(int j = _j1; j < _j2; j++) 
+				for(int k = _k1; k < _k2; k++) 
+					_layer_values[(j-_j1)*Ny+k-_k1] = 0;
 
-					const double xmin=(k+_koff-0.5)*layer->dx(), xmax=(k+_koff+0.5)*layer->dx();
-					const double ymin=(j+_joff-0.5)*layer->dy(), ymax=(j+_joff+0.5)*layer->dy();
-					const BoostBox cell_bbox = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
-					std::complex<double> value = 0.0;
-					for (auto polymat : layer->get_polymats()) {
-						for (auto bpoly : polymat->get_bpolys()) {
-							double outer_fraction = inv_cell_area * ring_box_intersection_area(bpoly.outer(), cell_bbox,
-																							   layer->polys_valid());
-							value += polymat->get_matval() * outer_fraction;
-
+			for (auto polymat : layer->get_polymats()) {
+				for (auto bpoly : polymat->get_bpolys()) {
+					for(int j = _j1; j < _j2; j++) {
+						for(int k = _k1; k < _k2; k++) {
+							const double xmin=(k+_koff-0.5)*layer->dx(), xmax=(k+_koff+0.5)*layer->dx();
+							const double ymin=(j+_joff-0.5)*layer->dy(), ymax=(j+_joff+0.5)*layer->dy();
+							const BoostBox cell_bbox = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
+							double outer_fraction = inv_cell_area * ring_box_intersection_area(bpoly.outer(), cell_bbox);
+							_layer_values[(j-_j1)*Ny+k-_k1] += polymat->get_matval() * outer_fraction;
 							for (auto inner_ring : bpoly.inners()) {
-								double inner_fraction = inv_cell_area * ring_box_intersection_area(inner_ring, cell_bbox,
-																								   layer->polys_valid());
-								value -= polymat->get_matval() * inner_fraction;
+								double inner_fraction = inv_cell_area * ring_box_intersection_area(inner_ring, cell_bbox);
+								_layer_values[(j-_j1)*Ny+k-_k1] -= polymat->get_matval() * inner_fraction;
 							}
 						}
 					}
-					_layer_values[(j-_j1)*Ny+k-_k1] = value;
 				}
 			}
 		};
