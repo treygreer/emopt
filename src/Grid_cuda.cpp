@@ -441,8 +441,8 @@ public:
 			const int Nx = k2-k1;
 			const int Ny = j2-j1;
 			const int Nz = i2-i1;
-			_grid = std::vector<std::complex<double>>(Nz*Ny*Nx, 0.0);
-			_layer_values = std::vector<std::complex<double>>(Ny*Nx, 0.0);
+			_grid.resize(Nz*Ny*Nx, 0.0);
+			_layer_values.resize(Ny*Nx, 0.0);
 		};
 			
 	void compute_layer(StructuredMaterialLayer* layer)
