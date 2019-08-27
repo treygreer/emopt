@@ -14,7 +14,7 @@ else
 	endif
 endif
 
-CXXFLAGS = -Wall -fopenmp -march=native -std=c++11 -g -O3 -DNDEBUG 
+CXXFLAGS = -Wall -fopenmp -march=native -std=c++11 -g -O4 -DNDEBUG 
 NVCXXFLAGS = -std=c++11 -lineinfo -O3 -DNDEBUG # -Xptxas="-v"
 
 INCLUDES = -I${EIGEN_DIR} -I${BOOST_DIR}

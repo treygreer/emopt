@@ -32,7 +32,7 @@ void Material3D_get_value(Material3D* mat, complex64* val,
 	double ioff = fpi - i;
 	std::vector<std::complex<double>> grid(1);
 	std::complex<double> mat_val;
-	mat->get_values(&grid[0], k, k+1, j, j+1, i, i+1, koff, joff, ioff);
+	mat->get_values(grid.data(), k, k+1, j, j+1, i, i+1, koff, joff, ioff);
     val[0].real = grid[0].real();
     val[0].imag = grid[0].imag();
 }
@@ -49,7 +49,7 @@ void Material3D_get_values(Material3D* mat, complex64* arr,
         Nz = i2-i1;
 
 	std::vector<std::complex<double>> grid(Nx*Ny*Nz);
-    mat->get_values(&grid[0], k1, k2, j1, j2, i1, i2, koff, joff, ioff);
+    mat->get_values(grid.data(), k1, k2, j1, j2, i1, i2, koff, joff, ioff);
 
 	// convert from std::complex<double> to (Numpy) complex64
     for(int i = 0; i < Nx*Ny*Nz; i++) {

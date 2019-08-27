@@ -426,6 +426,52 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
     // aaannnddd we're done!
 }
 
+class CudaGrid {
+private:
+	std::vector<std::complex<double>> _grid;
+	std::vector<std::complex<double>> _layer_values;
+	int _k1, _k2, _j1, _j2, _i1, _i2;
+	double _koff, _joff;
+public:
+	CudaGrid(int k1, int k2, int j1, int j2, int i1, int i2,
+			 double koff, double joff) :
+		_k1(k1), _k2(k2), _j1(j1), _j2(j2), _i1(i1), _i2(i2),
+		_koff(koff), _joff(joff)
+		{
+			const int Nx = k2-k1;
+			const int Ny = j2-j1;
+			const int Nz = i2-i1;
+			_grid = std::vector<std::complex<double>>(Nz*Ny*Nx, 0.0);
+			_layer_values = std::vector<std::complex<double>>(Ny*Nx, 0.0);
+		};
+			
+	void compute_layer(StructuredMaterialLayer* layer)
+		{
+			layer->get_values(_layer_values.data(), _k1, _k2, _j1, _j2, _koff, _joff);
+		};
+
+	void composite_into_slice(double alpha, int z_index)
+		{
+			const int Nx = _k2-_k1;
+			const int Ny = _j2-_j1;
+			for(int j = _j1; j < _j2; j++) {
+				for(int k = _k1; k < _k2; k++) {
+					int layer_index = (j-_j1)*Nx + (k-_k1);
+					int grid_index = layer_index + (z_index-_i1)*Nx*Ny;
+					_grid[grid_index] += alpha * _layer_values[layer_index];
+				}
+			}
+		};
+
+	void return_grid_values(std::complex<double> *grid)
+		{
+			const int Nx = _k2-_k1;
+			const int Ny = _j2-_j1;
+			const int Nz = _i2-_i1;
+			std::memcpy(grid, _grid.data(), Nx*Ny*Nz*sizeof(std::complex<double>));
+		};
+};
+
 // Note that this takes a 1D array!
 void StructuredMaterial3D::get_values(std::complex<double>* grid,
 									  int k1, int k2, 
@@ -433,51 +479,34 @@ void StructuredMaterial3D::get_values(std::complex<double>* grid,
 									  int i1, int i2, 
 									  double koff, double joff, double ioff)
 {
-	const int Nx = k2-k1, Ny = j2-j1;
-
 	auto layer = _layers.begin();
 	auto layer_next = _layers.begin()++;
-	std::vector<std::complex<double>> layer_mat_values(Nx*Ny);
+	CudaGrid cuda_grid(k1, k2, j1, j2, i1, i2, koff, joff);
 	StructuredMaterialLayer* values_layer = NULL;
 
-    for(int i = i1; i < i2; i++) {  // z 'slice' index
+    for(int slice_idx = i1; slice_idx < i2; slice_idx++) {  // z index
 
-		double       slice_z_min = (i+ioff-0.5) * _dz;
-		const double slice_z_max = (i+ioff+0.5) * _dz;
+		double       slice_z_min = (slice_idx+ioff-0.5) * _dz;
+		const double slice_z_max = (slice_idx+ioff+0.5) * _dz;
 
-		// initialize this slice to zero
-		for (int j = j1; j < j2; j++) 
-			for (int k = k1; k < k2; k++) 
-				grid[(i-i1)*Nx*Ny + (j-j1)*Nx + (k-k1)] = 0.0;
-			
 		while (layer_next != _layers.end()) {
 			double layer_z_base = (*layer)->z_base();
 			double layer_z_top = (*layer_next)->z_base();
 
 			if (slice_z_min >= layer_z_base) {
 				if (values_layer != *layer) {
-					(*layer)->get_values(&layer_mat_values[0], k1, k2, j1, j2, koff, joff);
+					cuda_grid.compute_layer(*layer);
 					values_layer = *layer;
 				}
 				if (slice_z_max <= layer_z_top) {
-					for(int j = j1; j < j2; j++) {
-						for(int k = k1; k < k2; k++) {
-							int layer_index = (j-j1)*Nx + (k-k1);
-							int grid_index = layer_index + (i-i1)*Nx*Ny;
-							grid[grid_index] += (slice_z_max - slice_z_min) / _dz * layer_mat_values[layer_index];
-						}
-					}
+					cuda_grid.composite_into_slice((slice_z_max - slice_z_min) / _dz,
+												   slice_idx);
 					break;  // break out of layer loop: stay on this layer and go to next slice
 				}
 				else if (slice_z_min < layer_z_top) {
 					assert(slice_z_max > layer_z_top);
-					for(int j = j1; j < j2; j++) {
-						for(int k = k1; k < k2; k++) {
-							int layer_index = (j-j1)*Nx + (k-k1);
-							int grid_index = layer_index + (i-i1)*Nx*Ny;
-							grid[grid_index] += (layer_z_top - slice_z_min) / _dz * layer_mat_values[layer_index];
-						}
-					}
+					cuda_grid.composite_into_slice((layer_z_top - slice_z_min) / _dz,
+													slice_idx);
 					slice_z_min = layer_z_top;  // go to next layer and stay on this slice
 				}
 				else {
@@ -487,4 +516,6 @@ void StructuredMaterial3D::get_values(std::complex<double>* grid,
 			layer = layer_next++;
         } // layer loop
     } // slice loop
+
+	cuda_grid.return_grid_values(grid);
 }
