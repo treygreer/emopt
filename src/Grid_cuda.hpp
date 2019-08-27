@@ -138,9 +138,12 @@ namespace GridCuda {
 		/* Get the complex material value at an indexed position.
 		 * @x the x index (column) of the material value
 		 * @y the y index (row) of the material value
-		 * @return the complex material value at (x,y).  If no MaterialPrimitive exists at (x,y), 1.0 is returned.
+		 * @return the complex material value at (x,y).  If no MaterialPrimitive exists at (x,y),
+		 *  _background is returned.
 		 */
 		std::complex<double> get_value(double x, double y);
+		void get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2,
+						double koff, double joff);
 
         /* Get the list of primitives belonging to this StructuredMaterial
          * @return The std::list<MaterialPrimitive*> containing the constituent
