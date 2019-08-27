@@ -438,6 +438,7 @@ void StructuredMaterial3D::get_values(std::complex<double>* grid,
 	auto layer = _layers.begin();
 	auto layer_next = _layers.begin()++;
 	std::vector<std::complex<double>> layer_mat_values(Nx*Ny);
+	StructuredMaterialLayer* values_layer = NULL;
 
     for(int i = i1; i < i2; i++) {  // z 'slice' index
 
@@ -454,7 +455,10 @@ void StructuredMaterial3D::get_values(std::complex<double>* grid,
 			double layer_z_top = (*layer_next)->z_base();
 
 			if (slice_z_min >= layer_z_base) {
-				(*layer)->get_values(&layer_mat_values[0], k1, k2, j1, j2, koff, joff);
+				if (values_layer != *layer) {
+					(*layer)->get_values(&layer_mat_values[0], k1, k2, j1, j2, koff, joff);
+					values_layer = *layer;
+				}
 				if (slice_z_max <= layer_z_top) {
 					for(int j = j1; j < j2; j++) {
 						for(int k = k1; k < k2; k++) {
