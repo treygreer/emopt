@@ -258,55 +258,6 @@ void StructuredMaterialLayer::add_polymats(std::list<PolyMat*> polymats)
     }
 }
 
-
-std::complex<double> StructuredMaterialLayer::get_value(double x, double y)
-{
-	std::complex<double> value = 0.0;
-	double xmin=(x-0.5)*_dx, xmax=(x+0.5)*_dx;
-	double ymin=(y-0.5)*_dy, ymax=(y+0.5)*_dy;
-	BoostBox cell_bbox = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
-	double inv_cell_area = 1.0 / bg::area(cell_bbox);
-
-	double fraction_sum = 0.0;
-	for (auto polymat : _polymats) {
-		for (auto bpoly : polymat->get_bpolys()) {
-			double outer_fraction = inv_cell_area * ring_box_intersection_area(bpoly.outer(), cell_bbox,
-				_polys_valid);
-			fraction_sum += outer_fraction; // for debugging
-			value += polymat->get_matval() * outer_fraction;
-
-			for (auto inner_ring : bpoly.inners()) {
-				double inner_fraction = inv_cell_area * ring_box_intersection_area(inner_ring, cell_bbox,
-					_polys_valid);
-				fraction_sum -= inner_fraction; // for debugging
-				value -= polymat->get_matval() * inner_fraction;
-			}
-		}
-	}
-	if (_polys_valid && fabs(fraction_sum - 1.0) > 1e-12) {
-		std::cerr << "ERROR SMLayer::get_value: x=" << x << " y=" << y << " fraction_sum = " << fraction_sum << "\n";
-		std::cerr << "     cell_bbox " << bg::wkt(cell_bbox) << "\n";
-		for (auto polymat : _polymats) {
-			std::cerr << "     polymat " << polymat << " " << bg::wkt(polymat->get_bpolys()) << "\n";
-		}
-		exit(-1);
-	}
-        
-	return value;
-}
-
-void StructuredMaterialLayer::get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2,
-										 double koff, double joff)
-{
-    int N = k2 - k1;
-
-    for(int j = j1; j < j2; j++) {
-        for(int k = k1; k < k2; k++) {
-            grid[(j-j1)*N+k-k1] = get_value(k+koff, j+joff);
-        }
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////////
 // ConstantMaterial3D
 ////////////////////////////////////////////////////////////////////////////////////
@@ -447,7 +398,32 @@ public:
 			
 	void compute_layer(StructuredMaterialLayer* layer)
 		{
-			layer->get_values(_layer_values.data(), _k1, _k2, _j1, _j2, _koff, _joff);
+			const int Ny = _k2 - _k1;
+			const double inv_cell_area = 1.0 / (layer->dx()*layer->dy());
+
+			for(int j = _j1; j < _j2; j++) {
+				for(int k = _k1; k < _k2; k++) {
+
+					const double xmin=(k+_koff-0.5)*layer->dx(), xmax=(k+_koff+0.5)*layer->dx();
+					const double ymin=(j+_joff-0.5)*layer->dy(), ymax=(j+_joff+0.5)*layer->dy();
+					const BoostBox cell_bbox = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
+					std::complex<double> value = 0.0;
+					for (auto polymat : layer->get_polymats()) {
+						for (auto bpoly : polymat->get_bpolys()) {
+							double outer_fraction = inv_cell_area * ring_box_intersection_area(bpoly.outer(), cell_bbox,
+																							   layer->polys_valid());
+							value += polymat->get_matval() * outer_fraction;
+
+							for (auto inner_ring : bpoly.inners()) {
+								double inner_fraction = inv_cell_area * ring_box_intersection_area(inner_ring, cell_bbox,
+																								   layer->polys_valid());
+								value -= polymat->get_matval() * inner_fraction;
+							}
+						}
+					}
+					_layer_values[(j-_j1)*Ny+k-_k1] = value;
+				}
+			}
 		};
 
 	void composite_into_slice(double alpha, int z_index)

@@ -154,6 +154,9 @@ namespace GridCuda {
 	    void verify_area();
 
 		inline double z_base() { return _z_base; };
+		inline double dx() { return _dx; };
+		inline double dy() { return _dy; };
+		inline bool polys_valid() { return _polys_valid; };
 	};
 
 /* Material class which provides the foundation for defining the system materials/structure.
