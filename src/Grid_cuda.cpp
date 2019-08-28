@@ -85,37 +85,25 @@ double trapezoid_box_intersection_area(const BoostRing trapezoid, const BoostBox
 	return bg::area(output_ring);
 }
 
-double ring_box_intersection_area(BoostRing ring, BoostBox box, bool debug=false)
+double ring_cell_intersection_area(BoostRing ring,
+								   double cell_xmin, double cell_xmax, double cell_ymin, double cell_ymax)
 {
 	double trapezoid_area_sum = 0.0;
-	double xmin_box = bg::get<bg::min_corner,0>(box);
+	const BoostBox cell_bbox = BoostBox(BoostPoint(cell_xmin, cell_ymin),
+										BoostPoint(cell_xmax, cell_ymax));
 	for (auto it=bg::segments_begin(ring); it!=bg::segments_end(ring); ++it) {
 		BoostPoint p0=*(it->first), p1=*(it->second);
 		double xmin_pts = std::min(bg::get<0>(p0), bg::get<0>(p1));
-		double xmin = std::min(xmin_pts, xmin_box) - 1.0;
+		double xmin = std::min(xmin_pts, cell_xmin) - 1.0;
 		double y0=bg::get<1>(p0);
 		double y1=bg::get<1>(p1);
 		BoostRing trapezoid { {xmin, y0}, p0, p1, {xmin, y1} };
 		bg::correct(trapezoid);
-		double intersection_area = trapezoid_box_intersection_area(trapezoid, box);
+		double intersection_area = trapezoid_box_intersection_area(trapezoid, cell_bbox);
 		if (y0 < y1) intersection_area = -intersection_area;
 		trapezoid_area_sum += intersection_area;
 	}
-
-	BoostMultiPolygon intersection_bpolys;
-	bg::intersection(ring, box, intersection_bpolys);
-	double boost_area = bg::area(intersection_bpolys);
-	if (fabs(boost_area-trapezoid_area_sum) / boost_area > 1e-12 &&
-		fabs(boost_area-trapezoid_area_sum) > 1e-12) 
-	{
-		std::cerr << "boost_area=" << boost_area << "  trapezoid_area_sum=" << trapezoid_area_sum << "\n";
-		std::cerr << "  ring: " << bg::wkt(ring) << "\n";
-		std::cerr << "  box:  " << bg::wkt(box) << "\n";
-		std::cerr << "  intersection:  " << bg::wkt(intersection_bpolys) << "\n";
-		//exit(-1);
-	}
 	return trapezoid_area_sum;
-	//return boost_area;
 }
 
 /**************************************** Materials ****************************************/
@@ -381,50 +369,78 @@ class CudaGrid {
 private:
 	std::vector<std::complex<double>> _grid;
 	std::vector<std::complex<double>> _layer_values;
+	std::vector<double> _cell_fractions;
 	int _k1, _k2, _j1, _j2, _i1, _i2;
 	double _koff, _joff;
+	double _dx, _dy;
+
+	void zero_layer_values()
+		{
+			const int Ny = _k2 - _k1;
+			for(int j = _j1; j < _j2; j++) 
+				for(int k = _k1; k < _k2; k++) 
+					_layer_values[(j-_j1)*Ny+k-_k1] = 0;
+		}
+
+	void compute_ring_cell_fractions(BoostRing ring)
+		{
+			const int Ny = _k2 - _k1;
+			for(int j = _j1; j < _j2; j++) {
+				for(int k = _k1; k < _k2; k++) {
+					const double xmin=(k+_koff-0.5)*_dx, xmax=(k+_koff+0.5)*_dx;
+					const double ymin=(j+_joff-0.5)*_dy, ymax=(j+_joff+0.5)*_dy;
+					int index = (j-_j1)*Ny+k-_k1;
+					double area = ring_cell_intersection_area(ring, xmin, xmax, ymin, ymax);
+					_cell_fractions[index] =  area / (_dx*_dy);
+				}
+			}
+		}
+			
+	void composite_cell_fraction(std::complex<double> matval)
+		{
+			const int Ny = _k2 - _k1;
+			for(int j = _j1; j < _j2; j++) {
+				for(int k = _k1; k < _k2; k++) {
+					int index = (j-_j1)*Ny+k-_k1;
+					_layer_values[index] += matval * _cell_fractions[index];
+				}
+			}
+		};
+
 public:
 	CudaGrid(int k1, int k2, int j1, int j2, int i1, int i2,
-			 double koff, double joff) :
+			 double koff, double joff,
+		     double dx, double dy) :
 		_k1(k1), _k2(k2), _j1(j1), _j2(j2), _i1(i1), _i2(i2),
-		_koff(koff), _joff(joff)
+		_koff(koff), _joff(joff),
+		_dx(dx), _dy(dy)
 		{
 			const int Nx = k2-k1;
 			const int Ny = j2-j1;
 			const int Nz = i2-i1;
 			_grid.resize(Nz*Ny*Nx, 0.0);
 			_layer_values.resize(Ny*Nx, 0.0);
+			_cell_fractions.resize(Ny*Nx, 0.0);
 		};
-			
-	void compute_layer(StructuredMaterialLayer* layer)
-		{
-			const int Ny = _k2 - _k1;
-			const double inv_cell_area = 1.0 / (layer->dx()*layer->dy());
 
-			for(int j = _j1; j < _j2; j++) 
-				for(int k = _k1; k < _k2; k++) 
-					_layer_values[(j-_j1)*Ny+k-_k1] = 0;
+	void compute_layer_values(StructuredMaterialLayer* layer)
+		{
+			zero_layer_values();
 
 			for (auto polymat : layer->get_polymats()) {
 				for (auto bpoly : polymat->get_bpolys()) {
-					for(int j = _j1; j < _j2; j++) {
-						for(int k = _k1; k < _k2; k++) {
-							const double xmin=(k+_koff-0.5)*layer->dx(), xmax=(k+_koff+0.5)*layer->dx();
-							const double ymin=(j+_joff-0.5)*layer->dy(), ymax=(j+_joff+0.5)*layer->dy();
-							const BoostBox cell_bbox = BoostBox(BoostPoint(xmin, ymin), BoostPoint(xmax, ymax));
-							double outer_fraction = inv_cell_area * ring_box_intersection_area(bpoly.outer(), cell_bbox);
-							_layer_values[(j-_j1)*Ny+k-_k1] += polymat->get_matval() * outer_fraction;
-							for (auto inner_ring : bpoly.inners()) {
-								double inner_fraction = inv_cell_area * ring_box_intersection_area(inner_ring, cell_bbox);
-								_layer_values[(j-_j1)*Ny+k-_k1] -= polymat->get_matval() * inner_fraction;
-							}
-						}
+					auto outer_ring = bpoly.outer();
+					compute_ring_cell_fractions(outer_ring);
+					composite_cell_fraction(polymat->get_matval());
+					for (auto inner_ring : bpoly.inners()) {
+						compute_ring_cell_fractions(inner_ring);
+						composite_cell_fraction(polymat->get_matval());
 					}
 				}
 			}
 		};
 
-	void composite_into_slice(double alpha, int z_index)
+	void composite_layer_values_into_slice(double alpha, int z_index)
 		{
 			const int Nx = _k2-_k1;
 			const int Ny = _j2-_j1;
@@ -455,7 +471,7 @@ void StructuredMaterial3D::get_values(std::complex<double>* grid,
 {
 	auto layer = _layers.begin();
 	auto layer_next = _layers.begin()++;
-	CudaGrid cuda_grid(k1, k2, j1, j2, i1, i2, koff, joff);
+	CudaGrid cuda_grid(k1, k2, j1, j2, i1, i2, koff, joff, _dx, _dy);
 	StructuredMaterialLayer* values_layer = NULL;
 
     for(int slice_idx = i1; slice_idx < i2; slice_idx++) {  // z index
@@ -469,18 +485,18 @@ void StructuredMaterial3D::get_values(std::complex<double>* grid,
 
 			if (slice_z_min >= layer_z_base) {
 				if (values_layer != *layer) {
-					cuda_grid.compute_layer(*layer);
+					cuda_grid.compute_layer_values(*layer);
 					values_layer = *layer;
 				}
 				if (slice_z_max <= layer_z_top) {
-					cuda_grid.composite_into_slice((slice_z_max - slice_z_min) / _dz,
-												   slice_idx);
+					cuda_grid.composite_layer_values_into_slice((slice_z_max - slice_z_min) / _dz,
+																slice_idx);
 					break;  // break out of layer loop: stay on this layer and go to next slice
 				}
 				else if (slice_z_min < layer_z_top) {
 					assert(slice_z_max > layer_z_top);
-					cuda_grid.composite_into_slice((layer_z_top - slice_z_min) / _dz,
-													slice_idx);
+					cuda_grid.composite_layer_values_into_slice((layer_z_top - slice_z_min) / _dz,
+																slice_idx);
 					slice_z_min = layer_z_top;  // go to next layer and stay on this slice
 				}
 				else {
