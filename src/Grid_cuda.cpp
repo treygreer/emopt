@@ -85,26 +85,6 @@ double trapezoid_box_intersection_area(const BoostRing trapezoid, const BoostBox
 	return bg::area(output_ring);
 }
 
-double ring_cell_intersection_area(BoostRing ring,
-								   double cell_xmin, double cell_xmax, double cell_ymin, double cell_ymax)
-{
-	double trapezoid_area_sum = 0.0;
-	const BoostBox cell_bbox = BoostBox(BoostPoint(cell_xmin, cell_ymin),
-										BoostPoint(cell_xmax, cell_ymax));
-	for (auto it=bg::segments_begin(ring); it!=bg::segments_end(ring); ++it) {
-		BoostPoint p0=*(it->first), p1=*(it->second);
-		double xmin_pts = std::min(bg::get<0>(p0), bg::get<0>(p1));
-		double xmin = std::min(xmin_pts, cell_xmin) - 1.0;
-		double y0=bg::get<1>(p0);
-		double y1=bg::get<1>(p1);
-		BoostRing trapezoid { {xmin, y0}, p0, p1, {xmin, y1} };
-		bg::correct(trapezoid);
-		double intersection_area = trapezoid_box_intersection_area(trapezoid, cell_bbox);
-		if (y0 < y1) intersection_area = -intersection_area;
-		trapezoid_area_sum += intersection_area;
-	}
-	return trapezoid_area_sum;
-}
 
 /**************************************** Materials ****************************************/
 
@@ -374,6 +354,7 @@ private:
 	double _koff, _joff;
 	double _dx, _dy;
 
+
 	void zero_layer_values()
 		{
 			const int Ny = _k2 - _k1;
@@ -387,11 +368,31 @@ private:
 			const int Ny = _k2 - _k1;
 			for(int j = _j1; j < _j2; j++) {
 				for(int k = _k1; k < _k2; k++) {
-					const double xmin=(k+_koff-0.5)*_dx, xmax=(k+_koff+0.5)*_dx;
-					const double ymin=(j+_joff-0.5)*_dy, ymax=(j+_joff+0.5)*_dy;
 					int index = (j-_j1)*Ny+k-_k1;
-					double area = ring_cell_intersection_area(ring, xmin, xmax, ymin, ymax);
-					_cell_fractions[index] =  area / (_dx*_dy);
+					_cell_fractions[index] = 0.0;
+				}
+			}
+
+			for (auto it=bg::segments_begin(ring); it!=bg::segments_end(ring); ++it) {
+				BoostPoint p0=*(it->first), p1=*(it->second);
+				double segment_xmin = std::min(bg::get<0>(p0), bg::get<0>(p1));
+				double y0=bg::get<1>(p0);
+				double y1=bg::get<1>(p1);
+				for(int j = _j1; j < _j2; j++) {
+					for(int k = _k1; k < _k2; k++) {
+						int index = (j-_j1)*Ny+k-_k1;
+						const double cell_xmin=(k+_koff-0.5)*_dx, cell_xmax=(k+_koff+0.5)*_dx;
+						const double cell_ymin=(j+_joff-0.5)*_dy, cell_ymax=(j+_joff+0.5)*_dy;
+						const BoostBox cell_bbox = BoostBox(BoostPoint(cell_xmin, cell_ymin),
+															BoostPoint(cell_xmax, cell_ymax));
+						double xmin = std::min(segment_xmin, cell_xmin) - 1.0;
+						BoostRing trapezoid { {xmin, y0}, p0, p1, {xmin, y1} };
+						bg::correct(trapezoid);
+
+						double intersection_area = trapezoid_box_intersection_area(trapezoid, cell_bbox);
+						if (y0 < y1) intersection_area = -intersection_area;
+						_cell_fractions[index] +=  intersection_area / (_dx*_dy);
+					}
 				}
 			}
 		}
