@@ -98,11 +98,6 @@ double trapezoid_box_intersection_area(CudaPoint& point0, CudaPoint& point1,
 													 CudaPoint(cell_xmax, cell_ymax),
 													 CudaPoint(cell_xmin, cell_ymax) };
 
-	//std::cerr << "*** intersect ********\n";
-	//std::cerr << "   point0 = " << point0 << " point1=" << point1 << "\n";
-	//std::cerr << "   output ring = " << wkt(output_ring, output_ring_N) << "\n";
-	//std::cerr << "   clip ring = " << wkt(clip_ring, CLIP_RING_N) << "\n";
-
 	std::array<CudaPoint, IO_RING_MAX> input_ring; int input_ring_N;
 
 	for (auto clip_pt0 = &clip_ring[CLIP_RING_N-1], clip_pt1 = &clip_ring[0];
@@ -110,40 +105,30 @@ double trapezoid_box_intersection_area(CudaPoint& point0, CudaPoint& point1,
 		 clip_pt0 = clip_pt1, clip_pt1++)
 	{
 		Line clip_line(*clip_pt0, *clip_pt1);
-		//std::cerr << "      clip_pt0 = " << *clip_pt0 << " clip_pt1=" << *clip_pt1 << "\n";
-		// copy output ring to input ring and clear output ring
-		for (int i=0; i<IO_RING_MAX; ++i) input_ring[i] = output_ring[i];
+		input_ring = output_ring;
 		input_ring_N = output_ring_N;
 		output_ring_N = 0;
 
-		for (auto input_pt0 = &input_ring[input_ring_N-1], input_pt1 = &input_ring[0];
-			 input_pt1 < &input_ring[input_ring_N];
+		for (auto input_pt0 = input_ring.cbegin()+input_ring_N-1, input_pt1 = input_ring.cbegin();
+			 input_pt1 < input_ring.cbegin()+input_ring_N;
 			 input_pt0 = input_pt1, input_pt1++)
 		{		
-			//std::cerr << "        input_pt0 = " << *input_pt0 << " input_pt1=" << *input_pt1;
 			Line input_line(*input_pt0, *input_pt1);
 			CudaPoint intersecting_point;
 			clip_line.intersect(input_line, &intersecting_point);
-			//std::cerr << "        intersection = " << intersecting_point;
 
 			if (clip_line.point_inside(*input_pt1)) { 
-				//std::cerr << " pt1_in";
 				if (!clip_line.point_inside(*input_pt0)) {
-					//std::cerr << " pt0_out";
 					output_ring[output_ring_N++] = intersecting_point;
 				}
 				output_ring[output_ring_N++] = *input_pt1;
 			} else {
-				//std::cerr << " pt1_out";
 				if (clip_line.point_inside(*input_pt0)) {
-					//std::cerr << " pt0_in";
 					output_ring[output_ring_N++] = intersecting_point;
 				}
 			}
-			//std::cerr << "\n";
 		}
 	}
-	//std::cerr << "   output ring = " << wkt(output_ring, output_ring_N) << "\n";
 
 	// return area of output ring
 	double output_area_2x = 0.0;
@@ -153,9 +138,6 @@ double trapezoid_box_intersection_area(CudaPoint& point0, CudaPoint& point1,
 	{
 		output_area_2x += (output_pt1->x + output_pt0->x) * (output_pt1->y - output_pt0->y);
 	}
-
-	//std::cerr << "    area = " << output_area_2x * 0.5 << "\n";
-
 	return output_area_2x * 0.5;
 }
 
@@ -174,13 +156,6 @@ PolyMat::PolyMat(double* x, double* y, int n, std::complex<double> matval) :
 
     // correct the geometry
     bg::correct(_bpolys);
-
-	// debugging output
-	BoostBox bbox;
-    bg::envelope(_bpolys, bbox);
-	std::cout << "PolyMat::PolyMat "<< this << "... matval=" << matval.real() <<
-		", bbox=" << bg::wkt(bbox) <<
-		", area=" << bg::area(_bpolys) << "\n";
 }
 
 PolyMat::PolyMat(BoostMultiPolygon bpolys, std::complex<double> matval) :
@@ -232,7 +207,6 @@ StructuredMaterialLayer::StructuredMaterialLayer(double X, double Y, double dx, 
     bg::envelope(background_polymat->get_bpolys(), _envelope);
 
     _polymats.push_front(background_polymat);
-	std::cout << "SMLayer::SMLayer " << this << " area=" << bg::area(_envelope) << " background_polymat=" << background_polymat << "\n";
 }
 
 StructuredMaterialLayer::~StructuredMaterialLayer() {
@@ -350,24 +324,15 @@ StructuredMaterial3D::~StructuredMaterial3D()
 
 void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 {
-	std::cerr << "SM3D::add_polymat polymat=" << polymat <<
-		", material=" << polymat->get_matval().real() <<
-		", z1=" << z1 << " z2=" << z2 << "\n";
-
-	std::cerr << "   initial layers = [";
-	for (auto layer : _layers)
-		std::cerr << layer << " ";
-	std::cerr << "]\n";
-
     // Make sure the layer has a thickness
     if(z1 == z2) {
-        std::cout << "Warning in Structured3DMaterial: Provided layer has no \
+        std::cerr << "Warning in Structured3DMaterial: Provided layer has no \
                       thickness. It will be ignored." << std :: endl;
 
         return;
     }
     else if(z2 < z1) {
-        std::cout << "Warning in Structured3DMaterial: Provided layer has negative \
+        std::cerr << "Warning in Structured3DMaterial: Provided layer has negative \
                       thickness. It will be ignored." << std :: endl;
 
         return;
@@ -390,7 +355,6 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 		assert(point_z <= (*layer_after)->z_base());
 
 		if(point_z != (*layer_after)->z_base()) {  // if the point to insert is not already in the stack 
-			std::cerr << "  point_z=" << point_z << " layer_before=" << *layer_before << " layer_after=" << *layer_after << "\n";
 			StructuredMaterialLayer* layer = new StructuredMaterialLayer(_X, _Y, _dx, _dy, _background, point_z);
 			layer->add_polymats( (*layer_before)->get_polymats() );
 			_layers.insert(layer_after, layer);  // insert before layer_after
@@ -405,6 +369,7 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
         }
     }
 
+	/*
 	std::cout << "SM3D::add_polymat results:\n";
     for(auto layer : _layers) {
 		std::cout << "   layer " << layer << " at z=" << layer->z_base() << "...\n";
@@ -415,6 +380,7 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 			std::cout << "       " << bg::wkt(pm->get_bpolys()) << "\n";
 		}
     }
+	*/
 
     // aaannnddd we're done!
 }
