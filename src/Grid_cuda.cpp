@@ -25,57 +25,80 @@ std::ostream& operator<< (std::ostream& os, const CudaPoint& pt)
 	return os;
 }
 
-template <size_t N>
-std::ostream& operator<<(std::ostream& os, const std::array<CudaPoint, N>& ring)
-{
-	os << "POLYGON((";
-    copy(ring.begin(), ring.end(), std::ostream_iterator<CudaPoint>(os, ","));
-	os << ring.front() << "))";
-    return os;
-}
-
 template <size_t MAX>
 std::string wkt (std::array<CudaPoint, MAX> points, int N) {
 	std::ostringstream oss;
-	oss << "POLYGON((";
-	for (int i=0; i<N; ++i) {
-		oss << points[i].x << " " << points[i].y << ",";
+	if (N) {
+		oss << "POLYGON((";
+		for (auto p = points.cbegin(); p < points.cbegin()+N; ++p)
+			oss << p->x << " " << p->y << ",";
+		oss << points.front().x << " " << points.front().y << "))";
+	} else {
+		oss << "POLYGON(())";
 	}
-	oss << points[0].x << " " << points[0].y << "))";
 	return oss.str();
 }
 
-class Line {
+enum inside_direction { CLIP_XGE, CLIP_YGE, CLIP_XLE, CLIP_YLE };
+class CudaClipEdge {
 private:
-	double _a;
-	double _b;
-	double _c;
+	double _clip_val;
+	enum inside_direction _inside_dir;
 public:
-	Line(const CudaPoint& p1, const CudaPoint& p2) {
-		_a = p1.y - p2.y;
-		_b = p2.x - p1.x;
-		_c = p1.x*p2.y - p2.x*p1.y;
-	}
-
-	bool point_inside(const CudaPoint& p) {
-        return _a*p.x + _b*p.y + _c >= 0.0;
-	}
-
-	bool intersect(const Line& l, CudaPoint* p) {
-		double ap = _b*l._c - l._b*_c;
-		double bp = l._a*_c - _a*l._c;
-		double cp = _a*l._b - l._a*_b;
-		if (cp != 0) {
-			p->x = ap/cp;
-			p->y = bp/cp;
-			return true;
-		} else {
-			p->x = NAN;
-			p->y = NAN;
-			return false;
+	CudaClipEdge (double clip_val, enum inside_direction inside_dir)
+		: _clip_val(clip_val), _inside_dir(inside_dir) {
+	};
+	bool point_inside (const CudaPoint& p) {
+		bool result;
+		switch(_inside_dir) {
+		case CLIP_XGE:
+			result =  p.x >= _clip_val; break;
+		case CLIP_YGE:
+			result =  p.y >= _clip_val; break;
+		case CLIP_XLE:
+			result =  p.x <= _clip_val; break;
+		case CLIP_YLE:
+		default:
+			result =  p.y <= _clip_val; break;
 		}
-	}
+		return result;
+	};
+	CudaPoint intersect (const CudaPoint& p0, const CudaPoint& p1) {
+		CudaPoint p;
+		switch(_inside_dir) {
+		case CLIP_XGE:
+		case CLIP_XLE:
+			p.x = _clip_val;
+			p.y = p0.y + (p1.y-p0.y)/(p1.x-p0.x)*(p.x-p0.x);
+			break;
+		case CLIP_YGE:
+		case CLIP_YLE:
+		default:
+			p.y = _clip_val;
+			p.x = p0.x + (p1.x-p0.x)/(p1.y-p0.y)*(p.y-p0.y);
+		}
+		return p;
+	};
+	friend std::ostream& operator<< (std::ostream& os, const CudaClipEdge& pt);
 };
+
+std::ostream& operator<< (std::ostream& os, const CudaClipEdge& edge)
+{
+	switch(edge._inside_dir) {
+	case CLIP_XGE:
+		os << "X >= "; break;
+	case CLIP_YGE:
+		os << "Y >= "; break;
+	case CLIP_XLE:
+		os << "X <= "; break;
+	case CLIP_YLE:
+		os << "Y <= "; break;
+	default:
+		os << "UNDEFINED ";
+	}
+	os << edge._clip_val;
+	return os;
+}
 
 // from https://en.wikipedia.org/wiki/Sutherland-Hodgman_algorithm
 double trapezoid_box_intersection_area(CudaPoint& point0, CudaPoint& point1,
@@ -91,53 +114,57 @@ double trapezoid_box_intersection_area(CudaPoint& point0, CudaPoint& point1,
 													   CudaPoint(trapezoid_xmin, point1.y) };
 	int output_ring_N = 4;
 
-	// initialize clip ring to {x,y} {min,max} box */
-	const int CLIP_RING_N = 4;
-	std::array<CudaPoint, CLIP_RING_N> clip_ring = { CudaPoint(cell_xmin, cell_ymin),
-													 CudaPoint(cell_xmax, cell_ymin),
-													 CudaPoint(cell_xmax, cell_ymax),
-													 CudaPoint(cell_xmin, cell_ymax) };
+	// initialize clip ring */
+	const std::array<CudaClipEdge, 4> clip_edges = { CudaClipEdge(cell_xmin, CLIP_XGE),
+													 CudaClipEdge(cell_ymin, CLIP_YGE),
+													 CudaClipEdge(cell_xmax, CLIP_XLE),
+													 CudaClipEdge(cell_ymax, CLIP_YLE) };
 
 	std::array<CudaPoint, IO_RING_MAX> input_ring; int input_ring_N;
 
-	for (auto clip_pt0 = &clip_ring[CLIP_RING_N-1], clip_pt1 = &clip_ring[0];
-		 clip_pt1 < &clip_ring[CLIP_RING_N];
-		 clip_pt0 = clip_pt1, clip_pt1++)
-	{
-		Line clip_line(*clip_pt0, *clip_pt1);
+	//std::cerr << "*** intersect ********\n";
+	//std::cerr << "   point0 = " << point0 << " point1=" << point1 << "\n";
+
+	for (auto clip_edge :  clip_edges) {
 		input_ring = output_ring;
 		input_ring_N = output_ring_N;
 		output_ring_N = 0;
+		//std::cerr << "    clip edge: " << clip_edge << "\n";
+		//std::cerr << "      input ring = " << wkt(input_ring, input_ring_N) << "\n";
 
 		for (auto input_pt0 = input_ring.cbegin()+input_ring_N-1, input_pt1 = input_ring.cbegin();
 			 input_pt1 < input_ring.cbegin()+input_ring_N;
 			 input_pt0 = input_pt1, input_pt1++)
 		{		
-			Line input_line(*input_pt0, *input_pt1);
-			CudaPoint intersecting_point;
-			clip_line.intersect(input_line, &intersecting_point);
-
-			if (clip_line.point_inside(*input_pt1)) { 
-				if (!clip_line.point_inside(*input_pt0)) {
-					output_ring[output_ring_N++] = intersecting_point;
+			//std::cerr << "        input_pt0 = " << *input_pt0 << " input_pt1=" << *input_pt1;
+			if (clip_edge.point_inside(*input_pt1)) { 
+				//std::cerr << " pt1_in";
+				if (!clip_edge.point_inside(*input_pt0)) {
+					//std::cerr << " pt0_out(isect=" << clip_edge.intersect(*input_pt0, *input_pt1) << ") ";
+					output_ring[output_ring_N++] = clip_edge.intersect(*input_pt0, *input_pt1);
 				}
 				output_ring[output_ring_N++] = *input_pt1;
 			} else {
-				if (clip_line.point_inside(*input_pt0)) {
-					output_ring[output_ring_N++] = intersecting_point;
+				//std::cerr << "  pt1_out";
+				if (clip_edge.point_inside(*input_pt0)) {
+					//std::cerr << " pt0_in(isect=" << clip_edge.intersect(*input_pt0, *input_pt1) << ") ";
+					output_ring[output_ring_N++] = clip_edge.intersect(*input_pt0, *input_pt1);
 				}
 			}
+			//std::cerr << "\n";
 		}
+		//std::cerr << "      output ring = " << wkt(output_ring, output_ring_N) << "\n";
 	}
 
 	// return area of output ring
 	double output_area_2x = 0.0;
-	for (auto output_pt0 = &output_ring[output_ring_N-1], output_pt1 = &output_ring[0];
-			 output_pt1 < &output_ring[output_ring_N];
-			 output_pt0 = output_pt1, output_pt1++)
+	for (auto output_pt0 = output_ring.cbegin()+output_ring_N-1, output_pt1 = output_ring.cbegin();
+		 output_pt1 < output_ring.cbegin()+output_ring_N;
+		 output_pt0 = output_pt1, output_pt1++)
 	{
 		output_area_2x += (output_pt1->x + output_pt0->x) * (output_pt1->y - output_pt0->y);
 	}
+	//std::cerr << "    area = " << output_area_2x * 0.5 << "\n";
 	return output_area_2x * 0.5;
 }
 
