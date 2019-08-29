@@ -20,10 +20,10 @@ NVCXXFLAGS = -std=c++11 -lineinfo -O3 -DNDEBUG # -Xptxas="-v"
 INCLUDES = -I${EIGEN_DIR} -I${BOOST_DIR}
 LDFLAGS = -lpthread -lcuda -lcudart -L/usr/local/cuda/lib64 -g
 
-all: Grid.o Grid_ctypes.o FDTD.o Grid_cuda.o Grid_cuda_ctypes.o FDTD_cuda.o 
+all: Grid.o Grid_ctypes.o FDTD.o Grid_cuda.o Grid_cuda_ctypes.o FDTD_cuda.o CudaClipper.o
 	${CC} ${SHARED_FLAG} -fopenmp -fPIC -o Grid.so Grid.o Grid_ctypes.o ${LDFLAGS}
 	${CC} ${SHARED_FLAG} -fopenmp -fPIC -o FDTD.so FDTD.o ${LDFLAGS}
-	${CC} ${SHARED_FLAG} -fopenmp -fPIC -o Grid_cuda.so Grid_cuda.o Grid_cuda_ctypes.o ${LDFLAGS}
+	${CC} ${SHARED_FLAG} -fopenmp -fPIC -o Grid_cuda.so Grid_cuda.o Grid_cuda_ctypes.o CudaClipper.o ${LDFLAGS}
 	${CC} ${SHARED_FLAG} -fopenmp -fPIC -o FDTD_cuda.so FDTD_cuda.o ${LDFLAGS}
 	cp Grid.so ../emopt
 	cp FDTD.so ../emopt
@@ -41,7 +41,10 @@ FDTD.o: fdtd.cpp fdtd.hpp
 
 Grid_cuda.o: Grid_cuda.cpp Grid_cuda.hpp
 	${CC} -c -fPIC Grid_cuda.cpp ${CXXFLAGS} -o Grid_cuda.o ${INCLUDES}
-##  nvcc -c --compiler-options '-fPIC -Wall' Grid_cuda.cu ${NVCXXFLAGS} -o Grid_cuda.o ${INCLUDES}
+
+CudaClipper.o: CudaClipper.cpp CudaClipper.hpp Grid_cuda.hpp
+	${CC} -c -fPIC CudaClipper.cpp ${CXXFLAGS} -o CudaClipper.o ${INCLUDES}
+##  nvcc -c --compiler-options '-fPIC -Wall' CudaClipper.cu ${NVCXXFLAGS} -o CudaClipper.o
 
 Grid_cuda_ctypes.o: Grid_cuda.cpp Grid_cuda.hpp Grid_cuda_ctypes.cpp Grid_cuda_ctypes.hpp
 	${CC} -c -fPIC Grid_cuda_ctypes.cpp ${CXXFLAGS} -o Grid_cuda_ctypes.o ${INCLUDES}

@@ -3,8 +3,6 @@
 #ifndef __GRID_CUDA_CTYPES_HPP__
 #define __GRID_CUDA_CTYPES_HPP__
 
-using namespace GridCuda;
-
 // This acts as an interface to the numpy.complex64 data type
 typedef struct struct_complex64 {
 	double real,
