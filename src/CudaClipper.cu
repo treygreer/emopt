@@ -165,21 +165,18 @@ double trapezoid_box_intersection_area(CudaPoint& point0, CudaPoint& point1,
 
 void CudaClipper::zero_layer_values()
 {
-	const int Ny = _k2 - _k1;
-	for(int j = _j1; j < _j2; j++) 
-		for(int k = _k1; k < _k2; k++) 
-			_layer_values[(j-_j1)*Ny+k-_k1] = 0;
+	const int Nx = _k2-_k1;
+	const int Ny = _k2-_k1;
+	for(int i = 0; i<Nx*Ny; ++i) 
+		_layer_values[i] = 0;
 }
 
 void CudaClipper::compute_ring_cell_fractions(BoostRing ring)
 {
-	const int Ny = _k2 - _k1;
-	for(int j = _j1; j < _j2; j++) {
-		for(int k = _k1; k < _k2; k++) {
-			int index = (j-_j1)*Ny+k-_k1;
-			_cell_fractions[index] = 0.0;
-		}
-	}
+	const int Nx = _k2-_k1;
+	const int Ny = _k2-_k1;
+	for(int i = 0; i<Nx*Ny; ++i) 
+		_cell_fractions[i] = 0;
 
 	for (auto it=bg::segments_begin(ring); it!=bg::segments_end(ring); ++it) {
 		CudaPoint point0=CudaPoint(*(it->first)), point1=CudaPoint(*(it->second));
@@ -219,10 +216,20 @@ CudaClipper::CudaClipper(int k1, int k2, int j1, int j2, int i1, int i2,
 	const int Nx = k2-k1;
 	const int Ny = j2-j1;
 	const int Nz = i2-i1;
-	_grid.resize(Nz*Ny*Nx, 0.0);
-	_layer_values.resize(Ny*Nx, 0.0);
-	_cell_fractions.resize(Ny*Nx, 0.0);
-};
+	_grid = new std::complex<double>[Nx * Ny * Nz];
+	for (int i=0; i<Nx*Ny*Nz; ++i)
+		_grid[i] = 0.0;
+	_layer_values = new std::complex<double>[Ny * Nx];
+	_cell_fractions = new double[Ny * Nx];
+}
+
+CudaClipper::~CudaClipper()
+{
+	delete[] _grid;
+	delete[] _layer_values;
+	delete[] _cell_fractions;
+}
+
 
 void CudaClipper::compute_layer_values(StructuredMaterialLayer* layer)
 {
@@ -239,7 +246,7 @@ void CudaClipper::compute_layer_values(StructuredMaterialLayer* layer)
 			}
 		}
 	}
-};
+}
 
 void CudaClipper::composite_layer_values_into_slice(double alpha, int z_index)
 {
@@ -252,12 +259,12 @@ void CudaClipper::composite_layer_values_into_slice(double alpha, int z_index)
 			_grid[grid_index] += alpha * _layer_values[layer_index];
 		}
 	}
-};
+}
 
 void CudaClipper::return_grid_values(std::complex<double> *grid)
 {
 	const int Nx = _k2-_k1;
 	const int Ny = _j2-_j1;
 	const int Nz = _i2-_i1;
-	std::memcpy(grid, _grid.data(), Nx*Ny*Nz*sizeof(std::complex<double>));
-};
+	std::memcpy(grid, _grid, Nx*Ny*Nz*sizeof(std::complex<double>));
+}

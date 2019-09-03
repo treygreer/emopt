@@ -21,7 +21,7 @@ CXXFLAGS = -Wall -fopenmp -march=native -std=c++11 -g -O4 -DNDEBUG
 # http://www.ssl.berkeley.edu/~jimm/grizzly_docs/SSL/opt/intel/cc/9.0/lib/locale/en_US/mcpcom.msg
 NVCXX_SUPPRESS_WARNINGS = -Xcudafe "--diag_suppress=probable_guiding_friend"
 
-NVCXXFLAGS = --compiler-options '-fPIC -Wall' -std=c++11 -lineinfo -O3 -DNDEBUG ${NVCXX_SUPPRESS_WARNINGS} # -Xptxas="-v"
+NVCXXFLAGS = --compiler-options '-fPIC -Wall' -std=c++11 -lineinfo ${NVCXX_SUPPRESS_WARNINGS} -O3 -DNDEBUG  # -Xptxas="-v"
 
 INCLUDES = -I${EIGEN_DIR} -I${BOOST_DIR}
 LDFLAGS = -lpthread -lcuda -lcudart -L/usr/local/cuda/lib64 -g
@@ -48,7 +48,7 @@ FDTD.o: fdtd.cpp fdtd.hpp
 Grid_cuda.o: Grid_cuda.cpp Grid_cuda.hpp
 	${CC} -c -fPIC Grid_cuda.cpp ${CXXFLAGS} -o Grid_cuda.o ${INCLUDES}
 
-CudaClipper.o: CudaClipper.cpp CudaClipper.hpp Grid_cuda.hpp Makefile
+CudaClipper.o: CudaClipper.cu CudaClipper.hpp Grid_cuda.hpp Makefile
 	nvcc -c CudaClipper.cu ${NVCXXFLAGS} -I${BOOST_DIR} -o CudaClipper.o
 
 Grid_cuda_ctypes.o: Grid_cuda.cpp Grid_cuda.hpp Grid_cuda_ctypes.cpp Grid_cuda_ctypes.hpp
