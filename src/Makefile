@@ -23,7 +23,7 @@ NVCXX_SUPPRESS_WARNINGS = -Xcudafe "--diag_suppress=probable_guiding_friend"
 
 NVCXXFLAGS = --compiler-options '-fPIC -Wall' -std=c++11 -lineinfo ${NVCXX_SUPPRESS_WARNINGS} -O3 -DNDEBUG  # -Xptxas="-v"
 
-INCLUDES = -I${EIGEN_DIR} -I${BOOST_DIR}
+INCLUDES = -I${EIGEN_DIR} -I${BOOST_DIR} -I/usr/local/cuda/include
 LDFLAGS = -lpthread -lcuda -lcudart -L/usr/local/cuda/lib64 -g
 
 all: Grid.o Grid_ctypes.o FDTD.o Grid_cuda.o Grid_cuda_ctypes.o FDTD_cuda.o CudaClipper.o

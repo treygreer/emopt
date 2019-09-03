@@ -17,7 +17,7 @@ void* checkCudaMallocManaged(int nbytes)
 	void *ptr;
 	cudaError_t code = cudaMallocManaged((void **)&ptr, nbytes);
 	if (code != cudaSuccess) {
-		std::string err_string = std::string("Cuda managed memory allocation error:  ") +
+		std::string err_string = std::string("fdtd_cuda managed memory allocation error:  ") +
 			std::string(cudaGetErrorString(code));
 		throw err_string;
 	}

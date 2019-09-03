@@ -1,5 +1,18 @@
 #include "CudaClipper.hpp"
 #include <iostream>
+//#include <cuda_runtime_api.h>
+
+void* checkCudaMallocManaged(int nbytes)
+{
+	void *ptr;
+	cudaError_t code = cudaMallocManaged((void **)&ptr, nbytes);
+	if (code != cudaSuccess) {
+		std::string err_string = std::string("CudaClipper managed memory allocation error:  ") +
+			std::string(cudaGetErrorString(code));
+		throw err_string;
+	}
+	return ptr;
+}
 
 class CudaPoint {
 public:
@@ -42,7 +55,7 @@ public:
 	CudaClipEdge (double clip_val, enum inside_direction inside_dir)
 		: _clip_val(clip_val), _inside_dir(inside_dir) {
 	};
-	bool point_inside (const CudaPoint& p) {
+	inline bool point_inside (const CudaPoint& p) {
 		bool result;
 		switch(_inside_dir) {
 		case CLIP_XGE:
@@ -57,7 +70,7 @@ public:
 		}
 		return result;
 	};
-	CudaPoint intersect (const CudaPoint& p0, const CudaPoint& p1) {
+	inline CudaPoint intersect (const CudaPoint& p0, const CudaPoint& p1) {
 		CudaPoint p;
 		switch(_inside_dir) {
 		case CLIP_XGE:
@@ -195,7 +208,7 @@ void CudaClipper::compute_ring_cell_fractions(BoostRing ring)
 	}
 }
 			
-void CudaClipper::composite_cell_fraction(std::complex<double> matval)
+void CudaClipper::composite_cell_fraction(thrust::complex<double> matval)
 {
 	const int Nx = _k2 - _k1;
 	for(int j = _j1; j < _j2; j++) {
@@ -216,18 +229,18 @@ CudaClipper::CudaClipper(int k1, int k2, int j1, int j2, int i1, int i2,
 	const int Nx = k2-k1;
 	const int Ny = j2-j1;
 	const int Nz = i2-i1;
-	_grid = new std::complex<double>[Nx * Ny * Nz];
+	_grid = (thrust::complex<double>*) checkCudaMallocManaged(sizeof(thrust::complex<double>) * Nx * Ny * Nz);
 	for (int i=0; i<Nx*Ny*Nz; ++i)
 		_grid[i] = 0.0;
-	_layer_values = new std::complex<double>[Ny * Nx];
-	_cell_fractions = new double[Ny * Nx];
+	_layer_values = (thrust::complex<double>*) checkCudaMallocManaged(sizeof(thrust::complex<double>) * Nx * Ny);
+	_cell_fractions = (double*) checkCudaMallocManaged(sizeof(double) * Nx * Ny);
 }
 
 CudaClipper::~CudaClipper()
 {
-	delete[] _grid;
-	delete[] _layer_values;
-	delete[] _cell_fractions;
+	cudaFree(_grid);
+	cudaFree(_layer_values);
+	cudaFree(_cell_fractions);
 }
 
 
@@ -248,16 +261,35 @@ void CudaClipper::compute_layer_values(StructuredMaterialLayer* layer)
 	}
 }
 
+__global__ void cuda_composite(thrust::complex<double>* slice, thrust::complex<double>* layer, double alpha,
+							   int Nx, int Ny)
+{
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+	int k = blockIdx.x * blockDim.x + threadIdx.x;
+	int index = j*Nx + k;
+	if (j<Ny && k<Nx) {
+		slice[index] += alpha * layer[index];
+	}
+}
+
 void CudaClipper::composite_layer_values_into_slice(double alpha, int z_index)
 {
 	const int Nx = _k2-_k1;
 	const int Ny = _j2-_j1;
-	for(int j = _j1; j < _j2; j++) {
-		for(int k = _k1; k < _k2; k++) {
-			int layer_index = (j-_j1)*Nx + (k-_k1);
-			int grid_index = layer_index + (z_index-_i1)*Nx*Ny;
-			_grid[grid_index] += alpha * _layer_values[layer_index];
-		}
+	dim3 threadsPerBlock(8, 8); 
+	dim3 numBlocks(ceil((float)Nx/threadsPerBlock.x),
+				   ceil((float)Ny/threadsPerBlock.y));
+	cuda_composite <<<numBlocks, threadsPerBlock>>> (&_grid[(z_index-_i1)*Nx*Ny], _layer_values, alpha, Nx, Ny);
+
+	cudaError_t errSync  = cudaGetLastError();
+	cudaError_t errAsync = cudaDeviceSynchronize();
+	if (errSync != cudaSuccess) {
+		printf("CudaClipper sync kernel error: %s\n", cudaGetErrorString(errSync));
+		exit(-1);
+	}
+	if (errAsync != cudaSuccess) {
+		printf("CudaClipper async kernel error: %s\n", cudaGetErrorString(errAsync));
+		exit(-1);
 	}
 }
 
@@ -266,5 +298,8 @@ void CudaClipper::return_grid_values(std::complex<double> *grid)
 	const int Nx = _k2-_k1;
 	const int Ny = _j2-_j1;
 	const int Nz = _i2-_i1;
-	std::memcpy(grid, _grid, Nx*Ny*Nz*sizeof(std::complex<double>));
+	for (int i=0; i<Nx*Ny*Nz; ++i) {
+		grid[i].real(_grid[i].real());
+		grid[i].imag(_grid[i].imag());
+	}
 }
