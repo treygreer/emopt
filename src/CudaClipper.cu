@@ -166,7 +166,7 @@ double trapezoid_box_intersection_area(CudaPoint& point0, CudaPoint& point1,
 void CudaClipper::zero_layer_values()
 {
 	const int Nx = _k2-_k1;
-	const int Ny = _k2-_k1;
+	const int Ny = _j2-_j1;
 	for(int i = 0; i<Nx*Ny; ++i) 
 		_layer_values[i] = 0;
 }
@@ -174,7 +174,7 @@ void CudaClipper::zero_layer_values()
 void CudaClipper::compute_ring_cell_fractions(BoostRing ring)
 {
 	const int Nx = _k2-_k1;
-	const int Ny = _k2-_k1;
+	const int Ny = _j2-_j1;
 	for(int i = 0; i<Nx*Ny; ++i) 
 		_cell_fractions[i] = 0;
 
@@ -182,7 +182,7 @@ void CudaClipper::compute_ring_cell_fractions(BoostRing ring)
 		CudaPoint point0=CudaPoint(*(it->first)), point1=CudaPoint(*(it->second));
 		for(int j = _j1; j < _j2; j++) {
 			for(int k = _k1; k < _k2; k++) {
-				int index = (j-_j1)*Ny+k-_k1;
+				int index = (j-_j1)*Nx+k-_k1;
 				const double cell_xmin=(k+_koff-0.5)*_dx, cell_xmax=(k+_koff+0.5)*_dx;
 				const double cell_ymin=(j+_joff-0.5)*_dy, cell_ymax=(j+_joff+0.5)*_dy;
 				double intersection_area = trapezoid_box_intersection_area(point0, point1,
@@ -197,10 +197,10 @@ void CudaClipper::compute_ring_cell_fractions(BoostRing ring)
 			
 void CudaClipper::composite_cell_fraction(std::complex<double> matval)
 {
-	const int Ny = _k2 - _k1;
+	const int Nx = _k2 - _k1;
 	for(int j = _j1; j < _j2; j++) {
 		for(int k = _k1; k < _k2; k++) {
-			int index = (j-_j1)*Ny+k-_k1;
+			int index = (j-_j1)*Nx+k-_k1;
 			_layer_values[index] += matval * _cell_fractions[index];
 		}
 	}

@@ -49,6 +49,7 @@ Grid_cuda.o: Grid_cuda.cpp Grid_cuda.hpp
 	${CC} -c -fPIC Grid_cuda.cpp ${CXXFLAGS} -o Grid_cuda.o ${INCLUDES}
 
 CudaClipper.o: CudaClipper.cu CudaClipper.hpp Grid_cuda.hpp Makefile
+#	${CC} -c -fPIC CudaClipper.cpp ${CXXFLAGS} -o CudaClipper.o ${INCLUDES}
 	nvcc -c CudaClipper.cu ${NVCXXFLAGS} -I${BOOST_DIR} -o CudaClipper.o
 
 Grid_cuda_ctypes.o: Grid_cuda.cpp Grid_cuda.hpp Grid_cuda_ctypes.cpp Grid_cuda_ctypes.hpp
