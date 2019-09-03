@@ -2,12 +2,9 @@
 // ignore particular warning in boost/geometry
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#pragma GCC diagnostic ignored "-Wnon-template-friend"
 #include <boost/geometry.hpp>
 #pragma GCC diagnostic pop
-
-#include <boost/geometry/geometries/point_xy.hpp>
-#include <boost/geometry/geometries/polygon.hpp>
-#include <boost/geometry/geometries/multi_polygon.hpp>
 
 #include <cmath>
 #include <complex>
