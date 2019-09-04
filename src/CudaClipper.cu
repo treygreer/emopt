@@ -18,9 +18,9 @@ class CudaPoint {
 public:
 	double x;
 	double y;
-	__host__ __device__ CudaPoint() :
+	__device__ CudaPoint() :
 		x(0), y(0) {};
-	__host__ __device__ CudaPoint(double x, double y) :
+	__device__ CudaPoint(double x, double y) :
 		x(x), y(y) {};
 	__host__ CudaPoint(BoostPoint pt) :
 		x(pt.x()), y(pt.y()) {};
@@ -52,10 +52,10 @@ private:
 	double _clip_val;
 	enum inside_direction _inside_dir;
 public:
-	__host__ __device__ CudaClipEdge (double clip_val, enum inside_direction inside_dir)
+	__device__ CudaClipEdge (double clip_val, enum inside_direction inside_dir)
 		: _clip_val(clip_val), _inside_dir(inside_dir) {
 	};
-	__host__ __device__ bool point_inside (const CudaPoint& p) {
+	__device__ bool point_inside (const CudaPoint& p) {
 		bool result;
 		switch(_inside_dir) {
 		case CLIP_XGE:
@@ -70,7 +70,7 @@ public:
 		}
 		return result;
 	};
-	__host__ __device__ CudaPoint intersect (const CudaPoint& p0, const CudaPoint& p1) {
+	__device__ CudaPoint intersect (const CudaPoint& p0, const CudaPoint& p1) {
 		CudaPoint p;
 		switch(_inside_dir) {
 		case CLIP_XGE:
@@ -108,15 +108,15 @@ std::ostream& operator<< (std::ostream& os, const CudaClipEdge& edge)
 }
 
 // from https://en.wikipedia.org/wiki/Sutherland-Hodgman_algorithm
-/*__global__*/ void cuda_trapezoid_box_intersection_area(double *cell_fractions,
-														 CudaPoint point0, CudaPoint point1,
-														 double j1off, double k1off,
-														 double dx, double dy,
-														 int Nx, int Ny, 
-														 int j, int k)
+__global__ void cuda_trapezoid_box_intersection_area(double *cell_fractions,
+													 CudaPoint point0, CudaPoint point1,
+													 double j1off, double k1off,
+													 double dx, double dy,
+													 int Nx, int Ny)
+
 {
-	//const int j = blockIdx.y * blockDim.y + threadIdx.y;
-	//const int k = blockIdx.x * blockDim.x + threadIdx.x;
+	const int j = blockIdx.y * blockDim.y + threadIdx.y;
+	const int k = blockIdx.x * blockDim.x + threadIdx.x;
 	const double cell_xmin=(k+k1off-0.5)*dx, cell_xmax=(k+k1off+0.5)*dx;
 	const double cell_ymin=(j+j1off-0.5)*dy, cell_ymax=(j+j1off+0.5)*dy;
 	const int index = j*Nx + k;
@@ -200,42 +200,36 @@ __global__ void zero_cell_fractions(double* cell_fractions, int Nx, int Ny)
 void CudaClipper::compute_ring_cell_fractions(BoostRing ring)
 {
 	zero_cell_fractions <<<numBlocks(), threadsPerBlock()>>> (_cell_fractions, Nx(), Ny());
-    //TODO: remove sync
-	cudaError_t errSync  = cudaGetLastError();
-	cudaError_t errAsync = cudaDeviceSynchronize();
-	if (errSync != cudaSuccess) {
-		printf("CudaClipper sync kernel error: %s\n", cudaGetErrorString(errSync));
-		exit(-1);
-	}
-	if (errAsync != cudaSuccess) {
-		printf("CudaClipper async kernel error: %s\n", cudaGetErrorString(errAsync));
-		exit(-1);
-	}
-
 
 	for (auto it=bg::segments_begin(ring); it!=bg::segments_end(ring); ++it) {
 		CudaPoint point0=CudaPoint(*(it->first)), point1=CudaPoint(*(it->second));
-		for (int j=0; j<Ny(); ++j)
-			for (int k=0; k<Nx(); ++k)
-		cuda_trapezoid_box_intersection_area /*<<<numBlocks(), threadsPerBlock() >>>*/
+		cuda_trapezoid_box_intersection_area <<<numBlocks(), threadsPerBlock() >>>
 			(_cell_fractions,
 			 point0, point1,
 			 _j1 + _joff,
 			 _k1 + _koff,
-			 _dx, _dy, Nx(), Ny(),
-			 j, k );
+			 _dx, _dy, Nx(), Ny());
 	}
 }
-			
+
+__global__ void cuda_composite_cell_fraction(thrust::complex<double> *layer_values,
+											 thrust::complex<double> matval,
+											 double *cell_fractions,
+											 int Nx, int Ny)
+{
+	const int j = blockIdx.y * blockDim.y + threadIdx.y;
+	const int k = blockIdx.x * blockDim.x + threadIdx.x;
+	const int index = j*Nx + k;
+	if (j<Ny && k<Nx) {
+		layer_values[index] += matval * cell_fractions[index];
+	}
+}
+
 void CudaClipper::composite_cell_fraction(thrust::complex<double> matval)
 {
-	for(int j = _j1; j < _j2; j++) {
-		for(int k = _k1; k < _k2; k++) {
-			int index = (j-_j1)*Nx()+k-_k1;
-			_layer_values[index] += matval * _cell_fractions[index];
-		}
-	}
-};
+	cuda_composite_cell_fraction <<<numBlocks(), threadsPerBlock()>>>
+		(_layer_values, matval, _cell_fractions, Nx(), Ny());
+}
 
 CudaClipper::CudaClipper(int k1, int k2, int j1, int j2, int i1, int i2,
 			double koff, double joff,
@@ -265,18 +259,6 @@ CudaClipper::~CudaClipper()
 void CudaClipper::compute_layer_values(StructuredMaterialLayer* layer)
 {
 	zero_layer_values <<<numBlocks(), threadsPerBlock()>>> (_layer_values, Nx(), Ny());
-    //TODO: remove sync
-	cudaError_t errSync  = cudaGetLastError();
-	cudaError_t errAsync = cudaDeviceSynchronize();
-	if (errSync != cudaSuccess) {
-		printf("CudaClipper sync kernel error: %s\n", cudaGetErrorString(errSync));
-		exit(-1);
-	}
-	if (errAsync != cudaSuccess) {
-		printf("CudaClipper async kernel error: %s\n", cudaGetErrorString(errAsync));
-		exit(-1);
-	}
-
 	for (auto polymat : layer->get_polymats()) {
 		for (auto bpoly : polymat->get_bpolys()) {
 			auto outer_ring = bpoly.outer();
@@ -306,18 +288,6 @@ void CudaClipper::composite_layer_values_into_slice(double alpha, int z_index)
 {
 	cuda_composite_layer <<<numBlocks(), threadsPerBlock()>>>
 		(&_grid[(z_index-_i1)*Nx()*Ny()], _layer_values, alpha, Nx(), Ny());
-
-    //TODO: remove sync
-	cudaError_t errSync  = cudaGetLastError();
-	cudaError_t errAsync = cudaDeviceSynchronize();
-	if (errSync != cudaSuccess) {
-		printf("CudaClipper sync kernel error: %s\n", cudaGetErrorString(errSync));
-		exit(-1);
-	}
-	if (errAsync != cudaSuccess) {
-		printf("CudaClipper async kernel error: %s\n", cudaGetErrorString(errAsync));
-		exit(-1);
-	}
 }
 
 void CudaClipper::return_grid_values(std::complex<double> *grid)
