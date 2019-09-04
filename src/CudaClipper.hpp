@@ -13,7 +13,13 @@ private:
 	double _koff, _joff;
 	double _dx, _dy;
 
-	void zero_layer_values();
+	inline int Nx() { return _k2-_k1;};
+	inline int Ny() { return _j2-_j1;};
+	inline int Nz() { return _i2-_i1;};
+	inline dim3 threadsPerBlock() { return dim3(8, 8); }; 
+	inline dim3 numBlocks() { return dim3(ceil((float)Nx()/threadsPerBlock().x),
+										  ceil((float)Ny()/threadsPerBlock().y)); };
+
 	void compute_ring_cell_fractions(BoostRing ring);
 	void composite_cell_fraction(thrust::complex<double> matval);
 
