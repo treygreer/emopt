@@ -152,8 +152,6 @@ from __future__ import absolute_import
 
 from builtins import range
 from builtins import object
-from . import fdfd
-from . import fdtd
 from .misc import info_message, warning_message, error_message, RANK, \
 NOT_PARALLEL, run_on_master, N_PROC, COMM
 from . import fomutils

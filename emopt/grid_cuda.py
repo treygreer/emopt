@@ -218,8 +218,7 @@ class ConstantMaterial3D(Material3D):
                                               new_value.imag)
         self._material_value = new_value
 
-from .grid import Material3D as noncuda_Material3D
-class StructuredMaterial3D(Material3D, noncuda_Material3D):
+class StructuredMaterial3D(Material3D):
     """Create a 3D material consisting of one or more polygons
     with thickness along z.
 

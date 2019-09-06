@@ -4,7 +4,7 @@ Common functions useful for calculating figures of merit and their derivatives.
 from __future__ import absolute_import
 from builtins import range
 from builtins import object
-from . import fdfd, misc
+from . import misc
 from .misc import NOT_PARALLEL
 from .defs import FieldComponent
 import numpy as np
