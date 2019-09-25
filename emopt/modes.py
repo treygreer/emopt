@@ -96,6 +96,13 @@ class ModeFullVector(object):
         The effective index near which modes are found
     neigs : int
         The number of modes to solve for.
+    dir : int
+        Direction of mode propagation (1 = forward, -1 = backward)
+    bc : str
+        The boundary conditions used. The possible boundary conditions are:
+            0 -- Perfect electric conductor (top and bottom)
+            E -- Electric field symmetry (bottom) and PEC (top)
+            H -- Magnetic field symmetry (bottom) and PEC (top)
 
     Methods
     -------
@@ -131,21 +138,20 @@ class ModeFullVector(object):
         self._fshape = domain.shape
 
         # figure out how 2D domain is oriented
-        n = None
         if(domain.Nx == 1):
-            n = 'x'
+            self.ndir = 'x'
             self._M = domain.Nz
             self._N = domain.Ny
             self.dx = domain.dy
             self.dy = domain.dz
         elif(domain.Ny == 1):
-            n = 'y'
+            self.ndir = 'y'
             self._M = domain.Nz
             self._N = domain.Nx
             self.dx = domain.dx
             self.dy = domain.dz
         elif(domain.Nz == 1):
-            n = 'z'
+            self.ndir = 'z'
             self._M = domain.Ny
             self._N = domain.Nx
             self.dx = domain.dx
@@ -153,7 +159,6 @@ class ModeFullVector(object):
         else:
             raise AttributeError('3D domains are not supported for 2D mode ' \
                                  'calculations!')
-        self.ndir = n
 
         self.verbose = verbose
 
@@ -226,8 +231,8 @@ class ModeFullVector(object):
         #self._ISHy = indset[0].createBlock(self._M*self._N, [4])
         #self._ISHz = indset[0].createBlock(self._M*self._N, [5])
 
-        # Boundary conditions default to PEC
-        self._bc = ['0', '0']
+        # Boundary conditions default to H symmetry
+        self._bc = ['H', 'H']
 
     @property
     def neff(self):
@@ -244,12 +249,12 @@ class ModeFullVector(object):
 
     @bc.setter
     def bc(self, bc):
-        if(bc[0] not in ['0', 'M', 'E', 'H', 'P', 'EM', 'HM']):
+        if(bc[0] not in ['E', 'H']):
             error_message("Boundary condition type '%s' not found. Use "
-                          "0, M, E, H, P, EM, HM." % (bc[0]), "emopt.modes")
-        if(bc[1] not in ['0', 'M', 'E', 'H', 'P', 'EM', 'HM']):
+                          "E or H." % (bc[0]), "emopt.modes")
+        if(bc[1] not in ['E', 'H']):
             error_message("Boundary condition type '%s' not found. Use "
-                          "0, M, E, H, P, EM, HM." % (bc[1]), "emopt.modes")
+                          "E or H." % (bc[1]), "emopt.modes")
 
         self._bc = bc
 
@@ -288,33 +293,37 @@ class ModeFullVector(object):
         # the solver assumes the mode propagates in the z direction however
         # slices pointing in other directions may be provided when used in
         # conjunction with the 3D solver.
-        get_eps = None
-        get_mu = None
-        i0 = self.domain.i1
+        i0 = self.domain.i1   # [i,j,k] are in domain space
         j0 = self.domain.j1
         k0 = self.domain.k1
+        print(f"self.ndir={self.ndir}")
 
-        if(self.ndir == 'x'):
-            get_eps_x = lambda x,y : eps.get_value(k0,j0+x+0.5,i0+y-0.5)
-            get_eps_y = lambda x,y : eps.get_value(k0,j0+x,i0+y)
-            get_eps_z = lambda x,y : eps.get_value(k0,j0+x,i0+y-0.5)
-            get_mu_x = lambda x,y : mu.get_value(k0,j0+x,i0+y)
-            get_mu_y = lambda x,y : mu.get_value(k0,j0+x+0.5,i0+y-0.5)
-            get_mu_z = lambda x,y : mu.get_value(k0,j0+x+0.5,i0+y)
+        if(self.ndir == 'x'):     #                                                                        z,y (3D domain)
+                                  #                                                                   ->   y,x (2D mode)
+            eps_x = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.0, arr=None)[:,:,0]
+            eps_y = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.5, arr=None)[:,:,0]
+            eps_z = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.0, arr=None)[:,:,0]
+            mu_x  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.5, arr=None)[:,:,0]
+            mu_y  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.0, arr=None)[:,:,0]
+            mu_z  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.5, arr=None)[:,:,0]
         elif(self.ndir == 'y'):
-            get_eps_x = lambda x,y : eps.get_value(k0+y,j0,i0+x)
-            get_eps_y = lambda x,y : eps.get_value(k0+y+0.5,j0,i0+x-0.5)
-            get_eps_z = lambda x,y : eps.get_value(k0+y,j0,i0+x-0.5)
-            get_mu_x = lambda x,y : mu.get_value(k0+y+0.5,j0,i0+x-0.5)
-            get_mu_y = lambda x,y : mu.get_value(k0+y,j0,i0+x)
-            get_mu_z = lambda x,y : mu.get_value(k0+y+0.5,j0,i0+x)
+            # TODO: FIXME
+            get_eps_x = lambda x,y : eps.get_value(k0+y,     j0, i0+x)
+            get_eps_y = lambda x,y : eps.get_value(k0+y+0.5, j0, i0+x-0.5)
+            get_eps_z = lambda x,y : eps.get_value(k0+y,     j0, i0+x-0.5)
+            get_mu_x  = lambda x,y :  mu.get_value(k0+y+0.5, j0, i0+x-0.5)
+            get_mu_y  = lambda x,y :  mu.get_value(k0+y,     j0, i0+x)
+            get_mu_z  = lambda x,y :  mu.get_value(k0+y+0.5, j0, i0+x)
         elif(self.ndir == 'z'):
-            get_eps_x = lambda x,y : eps.get_value(k0+x,j0+y,i0)
-            get_eps_y = lambda x,y : eps.get_value(k0+x,j0+y,i0)
-            get_eps_z = lambda x,y : eps.get_value(k0+x,j0+y,i0)
-            get_mu_x = lambda x,y : mu.get_value(k0+x,j0+y,i0)
-            get_mu_y = lambda x,y : mu.get_value(k0+x,j0+y,i0)
-            get_mu_z = lambda x,y : mu.get_value(k0+x,j0+y,i0)
+            # TODO: does this need 1/2 cell offsets???
+            eps_x = eps.get_values(k0, k0+N, j0, j0+M, i0, i0+1, koff=0.0, joff=0.0, ioff=0.0, arr=None)[0,:,:]
+            eps_y = eps_x;
+            eps_z = eps_x;
+            mu_x  =  mu.get_values(k0, k0+N, j0, j0+M, i0, i0+1, koff=0.0, joff=0.0, ioff=0.0, arr=None)[0,:,:]
+            mu_y  =  mu_x;
+            mu_z  =  mu_x;
+
+        print(f"eps_x.shape={eps_x.shape}")
 
         for I in range(self.ib, self.ie):
             A[I,I] = 0.0
@@ -335,7 +344,7 @@ class ModeFullVector(object):
                 A[I, JHz1] = ody
 
                 # Ex
-                A[I, JEx] = 1j*get_eps_x(x,y)
+                A[I, JEx] = 1j*eps_x[y,x]
 
                 # Setup the LHS B matrix
                 B[I,JHy] = 1j*self._dir
@@ -343,20 +352,11 @@ class ModeFullVector(object):
                 #############################
                 # enforce boundary conditions
                 #############################
-                if(x == 0):
-                    pass
-                elif(x == N-1):
-                    pass
-
                 if(y == 0):
-                    if(bc[1] == '0'): A[I, JEx] = 0
-                    elif(bc[1] == 'E'): A[I, JHz1] = 2*ody
-                    elif(bc[1] == 'H'):
+                    if(bc[1] == 'E'):  # H_z has odd symmetry at y=0
+                        A[I, JHz1] = 2*ody
+                    else:  # H_z has even symmetry at y=0
                         A[I, JHz1] = 0
-                        A[I, JEx] = 0
-                elif(y == M-1):
-                    pass
-
 
             # (stuff) = n_z B H_x
             elif(I < 2*N*M):
@@ -364,7 +364,7 @@ class ModeFullVector(object):
                 x = (I-1*M*N) - y * N
 
                 JHz1 = 5*N*M + y*N + x
-                JHz0 = 5*N*M + y*N + x - 1
+                JHz0 = 5*N*M + y*N + (x-1)
 
                 JEy = M*N + y*N + x
                 JHx = 3*M*N + y*N + x
@@ -374,7 +374,7 @@ class ModeFullVector(object):
                 A[I, JHz1] = -odx
 
                 # Ey
-                A[I, JEy] = 1j*get_eps_y(x,y)
+                A[I, JEy] = 1j*eps_y[y,x]
 
                 # Setup the LHS B matrix
                 B[I,JHx] = -1j*self._dir
@@ -383,16 +383,10 @@ class ModeFullVector(object):
                 # enforce boundary conditions
                 #############################
                 if(x == 0):
-                    if(bc[0] == '0'): A[I, JEy] = 0
-                    elif(bc[0] == 'E'): A[I, JHz1] = -2*odx
-                    elif(bc[0] == 'H'): A[I, JHz1] = 0
-                elif(x == N-1):
-                    pass
-
-                if(y == 0):
-                    pass
-                elif(y == M-1):
-                    pass
+                    if(bc[0] == 'E'):
+                        A[I, JHz1] = -2*odx
+                    else:
+                        A[I, JHz1] = 0
 
             # (stuff) = n_z B E_z
             elif(I < 3*N*M):
@@ -400,39 +394,25 @@ class ModeFullVector(object):
                 x = (I-2*M*N) - y * N
 
                 JEy0 = M*N + y*N + x
-                JEy1 = M*N + y*N + x + 1
+                JEy1 = M*N + y*N + (x+1)
 
                 JEx0 = y*N + x
                 JEx1 = (y+1)*N + x
 
                 JHz = 5*M*N + y*N + x
-                JEz = 2*M*N + y*N + x
 
                 # derivative of Ey
                 A[I, JEy0] = -odx
-                if(x < N-1): A[I,JEy1] = odx
+                if(x < N-1):
+                    A[I,JEy1] = odx
 
                 # derivative of Ex
                 A[I, JEx0] = ody
-                if(y < M-1): A[I, JEx1] = -ody
+                if(y < M-1):
+                    A[I, JEx1] = -ody
 
                 # Hz at x,y
-                A[I, JHz] = -1j*get_mu_z(x,y)
-
-
-                #############################
-                # enforce boundary conditions
-                #############################
-                if(x == 0):
-                    if(bc[0] == '0'): A[I, JEy0] = 0
-                elif(x == N-1):
-                    pass
-
-                if(y == 0):
-                    if(bc[1] == '0'): A[I, JEx0] = 0
-                    if(bc[1] == 'H'): A[I, JEx0] = 0
-                elif(y == M-1):
-                    pass
+                A[I, JHz] = -1j*mu_z[y,x]
 
             # (stuff) = n_z B E_y
             elif(I < 4*N*M):
@@ -447,27 +427,14 @@ class ModeFullVector(object):
 
                 # derivative of Ez
                 A[I,JEz0] = -ody
-                if(y < M-1): A[I,JEz1] = ody
+                if(y < M-1):
+                    A[I,JEz1] = ody
 
                 # Hx at x,y
-                A[I,JHx] = -1j*get_mu_x(x,y)
+                A[I,JHx] = -1j*mu_x[y,x]
 
                 # Setup the LHS B matrix
                 B[I,JEy] = 1j*self._dir
-
-                #############################
-                # enforce boundary conditions
-                #############################
-                if(x == 0):
-                    if(bc[0] == '0'): A[I, JHx] = 0
-                elif(x == N-1):
-                    pass
-
-                if(y == 0):
-                    if(bc[1] == '0'): A[I, JEz0] = 0
-                    if(bc[1] == 'H'): A[I, JEz0] = 0
-                elif(y == M-1):
-                    pass
 
             # (stuff) = n_z B E_x
             elif(I < 5*N*M):
@@ -475,7 +442,7 @@ class ModeFullVector(object):
                 x = (I-4*M*N) - y * N
 
                 JEz0 = 2*M*N + y*N + x
-                JEz1 = 2*M*N + y*N + x + 1
+                JEz1 = 2*M*N + y*N + (x+1)
 
                 JHy = 4*M*N + y*N + x
                 JEx = y*N + x
@@ -485,40 +452,23 @@ class ModeFullVector(object):
                 if(x < N-1): A[I,JEz1] = -odx
 
                 # Hy at x,y
-                A[I,JHy] = -1j*get_mu_y(x,y)
+                A[I,JHy] = -1j*mu_y[y,x]
 
                 # Setup the LHS B matrix
                 B[I,JEx] = -1j*self._dir
-
-                #############################
-                # enforce boundary conditions
-                #############################
-                if(x == 0):
-                    if(bc[0] == '0'): A[I, JEz0] = 0
-                elif(x == N-1):
-                    pass
-
-                if(y == 0):
-                    if(bc[1] == '0'): A[I, JHy] = 0
-                    if(bc[1] == 'H'): A[I, JHy] = 0
-                elif(y == M-1):
-                    pass
 
             # (stuff) = Hz (zero)
             elif(I < 6*M*N):
                 y = int((I-5*M*N)/N)
                 x = (I-5*M*N) - y * N
 
-                JHy0 = 4*M*N + y*N + x - 1
+                JHy0 = 4*M*N + y*N + (x-1)
                 JHy1 = 4*M*N + y*N + x
 
                 JHx0 = 3*M*N + (y-1)*N + x
                 JHx1 = 3*M*N + y*N + x
 
                 JEz = 2*M*N + y*N + x
-                JEz1 = 2*M*N + y*N + x + 1
-                JEz2 = 2*M*N + (y+1)*N + x
-                JEz3 = 2*M*N + (y+1)*N + x + 1
 
                 # derivative of Hy
                 if(x > 0): A[I, JHy0] = -odx
@@ -529,31 +479,22 @@ class ModeFullVector(object):
                 A[I, JHx1] = -ody
 
                 # Ez
-                A[I, JEz] = 1j*get_eps_z(x,y)
+                A[I, JEz] = 1j*eps_z[y,x]
 
                 #############################
                 # enforce boundary conditions
                 #############################
                 if(x == 0):
-                    if(bc[0] == '0'):
-                        A[I, JHx1] = 0
-                        if(y > 0): A[I, JHx0] = 0
-                    elif(bc[0] == 'E'): A[I,JHy1] = 2*odx
-                    elif(bc[0] == 'H'): A[I,JHy1] = 0
-                elif(x == N-1):
-                    pass
+                    if(bc[0] == 'E'):
+                        A[I,JHy1] = 2*odx
+                    else:
+                        A[I,JHy1] = 0  
 
                 if(y == 0):
-                    if(bc[1] == '0'):
-                        A[I, JHy1] = 0
-                        if(x > 0): A[I, JHy0] = 0
-                    elif(bc[1] == 'E'): A[I, JHx1] = -2*ody
-                    elif(bc[1] == 'H'):
+                    if(bc[1] == 'E'):
+                        A[I, JHx1] = -2*ody
+                    else:
                         A[I, JHx1] = 0
-                        A[I, JHy1] = 0
-                        if(x > 0): A[I, JHy0] = 0
-                elif(y == M-1):
-                    pass
 
         self._A.assemble()
         self._B.assemble()

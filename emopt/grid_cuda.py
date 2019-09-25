@@ -74,7 +74,7 @@ class Material3D(object):
     get_values(self, k1, k2, j1, j2, i1, i2, arr=None)
         Get the values of the material distribution within a set of array
         indicesa set of array indices.
-    get_values_on(self, domain)
+    get_values_in(self, domain)
         Get the values of the material distribution within a domain.
     """
 
@@ -103,10 +103,9 @@ class Material3D(object):
 
         return value
 
-    def get_values(self, k1, k2, j1, j2, i1, i2, sx=0, sy=0, sz=0, arr=None,
-                   reshape=True):
-        """Get the values of the material distribution within a set of array
-        indicesa set of array indices.
+    def get_values(self, k1, k2, j1, j2, i1, i2, koff=0, joff=0, ioff=0, arr=None):
+        """Get the values of the material distribution within
+        a set of array indices.
 
         Parameters
         ----------
@@ -119,18 +118,19 @@ class Material3D(object):
         j2 : int
             The upper integer bound on y of the desired region
         i1 : int
-            The lower integer bound on y of the desired region
+            The lower integer bound on z of the desired region
         i2 : int
-            The upper integer bound on y of the desired region
+            The upper integer bound on z of the desired region
         arr : numpy.ndarray (optional)
-            The array with dimension (m2-m1)x(n2-n1) with type np.complex128
+            The array with dimension (k2-k1)x(j2-j1)x(i2-i1) with type np.complex128
             which will store the retrieved material distribution. If None, a
             new array will be created. (optional = None)
 
         Returns
         -------
         numpy.ndarray
-            The retrieved complex material distribution.
+            The retrieved complex material distribution, 3D numpy array
+            in index order [z,y,x]
         """
         Nx = k2-k1
         Ny = j2-j1
@@ -141,14 +141,10 @@ class Material3D(object):
         else:
             arr = np.ravel(arr)
 
-        libGrid.Material3D_get_values(self._object, arr, k1, k2, j1, j2, i1,
-                                      i2, sx, sy, sz)
+        libGrid.Material3D_get_values(self._object, arr, k1, k2, j1, j2, i1, i2,
+                                      koff, joff, ioff)
 
-        # This might result in an expensive copy operation, unfortunately
-        if(reshape):
-            arr = np.reshape(arr, [Nz, Ny, Nx])
-
-        return arr
+        return np.reshape(arr, [Nz, Ny, Nx])
 
     def get_values_in(self, domain, sx=0, sy=0, sz=0, arr=None, squeeze=False):
         """Get the values of the material distribution within a domain.
