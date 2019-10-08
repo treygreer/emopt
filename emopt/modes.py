@@ -126,7 +126,7 @@ class ModeFullVector(object):
     def __init__(self, wavelength, eps, mu, domain, n0=1.0, neigs=1, \
                  backwards=False, verbose=True):
 
-        self._neff = []
+        info_message('ModeFullVector __init__')
         self.n0 = n0
         self.neigs = neigs
         self.wavelength = wavelength
@@ -250,11 +250,9 @@ class ModeFullVector(object):
     @bc.setter
     def bc(self, bc):
         if(bc[0] not in ['E', 'H']):
-            error_message("Boundary condition type '%s' not found. Use "
-                          "E or H." % (bc[0]), "emopt.modes")
+            error_message(f"Boundary condition type '{bc[0]}' not found. Use E or H.")
         if(bc[1] not in ['E', 'H']):
-            error_message("Boundary condition type '%s' not found. Use "
-                          "E or H." % (bc[1]), "emopt.modes")
+            error_message(f"Boundary condition type '{bc[1]}' not found. Use E or H.")
 
         self._bc = bc
 
@@ -271,6 +269,7 @@ class ModeFullVector(object):
         -----
         This function is run on all nodes.
         """
+        rank = PETSc.COMM_WORLD.getRank()
         if(self.verbose and NOT_PARALLEL):
             info_message('Building mode solver system matrix...')
 
@@ -296,34 +295,55 @@ class ModeFullVector(object):
         i0 = self.domain.i1   # [i,j,k] are in domain space
         j0 = self.domain.j1
         k0 = self.domain.k1
-        print(f"self.ndir={self.ndir}")
+        print(f"rank {rank} self.ndir={self.ndir}")
+        sys.stdout.flush()
 
-        if(self.ndir == 'x'):     #                                                                        z,y (3D domain)
-                                  #                                                                   ->   y,x (2D mode)
-            eps_x = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.0, arr=None)[:,:,0]
-            eps_y = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.5, arr=None)[:,:,0]
-            eps_z = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.0, arr=None)[:,:,0]
-            mu_x  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.5, arr=None)[:,:,0]
-            mu_y  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.0, arr=None)[:,:,0]
-            mu_z  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.5, arr=None)[:,:,0]
-        elif(self.ndir == 'y'):
-            # TODO: FIXME
-            get_eps_x = lambda x,y : eps.get_value(k0+y,     j0, i0+x)
-            get_eps_y = lambda x,y : eps.get_value(k0+y+0.5, j0, i0+x-0.5)
-            get_eps_z = lambda x,y : eps.get_value(k0+y,     j0, i0+x-0.5)
-            get_mu_x  = lambda x,y :  mu.get_value(k0+y+0.5, j0, i0+x-0.5)
-            get_mu_y  = lambda x,y :  mu.get_value(k0+y,     j0, i0+x)
-            get_mu_z  = lambda x,y :  mu.get_value(k0+y+0.5, j0, i0+x)
-        elif(self.ndir == 'z'):
-            # TODO: does this need 1/2 cell offsets???
-            eps_x = eps.get_values(k0, k0+N, j0, j0+M, i0, i0+1, koff=0.0, joff=0.0, ioff=0.0, arr=None)[0,:,:]
-            eps_y = eps_x;
-            eps_z = eps_x;
-            mu_x  =  mu.get_values(k0, k0+N, j0, j0+M, i0, i0+1, koff=0.0, joff=0.0, ioff=0.0, arr=None)[0,:,:]
-            mu_y  =  mu_x;
-            mu_z  =  mu_x;
+        if NOT_PARALLEL:
+            print(f"*************** building eps and mu arrays on node 0 ***********************************")
+            sys.stdout.flush()
+            if(self.ndir == 'x'):     #                                                                      z,y (3D domain)
+                #                                                                                       ->   y,x (2D mode)
+                eps_x = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.0, arr=None)[:,:,0]
+                eps_y = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.5, arr=None)[:,:,0]
+                eps_z = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.0, arr=None)[:,:,0]
+                mu_x  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.5, arr=None)[:,:,0]
+                mu_y  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.0, arr=None)[:,:,0]
+                mu_z  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.5, arr=None)[:,:,0]
+            elif(self.ndir == 'y'):
+                # TODO: FIXME
+                get_eps_x = lambda x,y : eps.get_value(k0+y,     j0, i0+x)
+                get_eps_y = lambda x,y : eps.get_value(k0+y+0.5, j0, i0+x-0.5)
+                get_eps_z = lambda x,y : eps.get_value(k0+y,     j0, i0+x-0.5)
+                get_mu_x  = lambda x,y :  mu.get_value(k0+y+0.5, j0, i0+x-0.5)
+                get_mu_y  = lambda x,y :  mu.get_value(k0+y,     j0, i0+x)
+                get_mu_z  = lambda x,y :  mu.get_value(k0+y+0.5, j0, i0+x)
+            elif(self.ndir == 'z'):
+                # TODO: does this need 1/2 cell offsets???
+                eps_x = eps.get_values(k0, k0+N, j0, j0+M, i0, i0+1, koff=0.0, joff=0.0, ioff=0.0, arr=None)[0,:,:]
+                eps_y = eps_x;
+                eps_z = eps_x;
+                mu_x  =  mu.get_values(k0, k0+N, j0, j0+M, i0, i0+1, koff=0.0, joff=0.0, ioff=0.0, arr=None)[0,:,:]
+                mu_y  =  mu_x;
+                mu_z  =  mu_x;
+        else:
+            eps_x = None
+            eps_y = None
+            eps_z = None
+            mu_x  = None
+            mu_y  = None
+            mu_z  = None
+        
+        comm = MPI.COMM_WORLD
+        eps_x = comm.bcast(eps_x, root=0)
+        eps_y = comm.bcast(eps_y, root=0)
+        eps_z = comm.bcast(eps_z, root=0)
+        mu_x  = comm.bcast(mu_x,  root=0)
+        mu_y  = comm.bcast(mu_y,  root=0)
+        mu_z  = comm.bcast(mu_z,  root=0)
 
+        print(f"************************************** rank {rank} self.ib={self.ib}, self.id={self.ie}");
         print(f"eps_x.shape={eps_x.shape}")
+        sys.stdout.flush()
 
         for I in range(self.ib, self.ie):
             A[I,I] = 0.0
@@ -496,8 +516,16 @@ class ModeFullVector(object):
                     else:
                         A[I, JHx1] = 0
 
+        print(f"************************************** node {rank} assembling A");
+        print(f"eps_x.shape={eps_x.shape}")
+        sys.stdout.flush()
         self._A.assemble()
+        print(f"************************************** node {rank} assembling B");
+        print(f"eps_x.shape={eps_x.shape}")
+        sys.stdout.flush()
         self._B.assemble()
+        print(f"************************************** node {rank} done assembling B");
+        sys.stdout.flush()
 
     def solve(self):
         """Solve for the modes of the structure.
@@ -506,8 +534,12 @@ class ModeFullVector(object):
         -----
         This function is run on all nodes.
         """
-        if(self.verbose and NOT_PARALLEL):
-            info_message('Solving...')
+        #if(self.verbose and NOT_PARALLEL):
+        #    info_message('Solving...')
+        rank = PETSc.COMM_WORLD.getRank()
+        print(f"************************************** node {rank} solving");
+        sys.stdout.flush()
+            
 
         # Setup the solve options. We are solving a generalized non-hermitian
         # eigenvalue problem (GNHEP)
@@ -515,6 +547,7 @@ class ModeFullVector(object):
         self._solver.setProblemType(SLEPc.EPS.ProblemType.GNHEP)
         self._solver.setDimensions(self.neigs, PETSc.DECIDE)
         self._solver.setTarget(self.n0) # "guess" for effective index
+        self._solver.setTolerances(1e-9, 100000)
         self._solver.setFromOptions()
 
         # Solve Ax=nBx using SLEPc.
@@ -535,7 +568,7 @@ class ModeFullVector(object):
             neigs = nconv
 
         for i in range(neigs):
-            self.neff[i] = self._solver.getEigenvalue(i)
+            self._neff[i] = self._solver.getEigenvalue(i)
             self._solver.getEigenvector(i, self._x[i])
 
     def __permute_field_component(self, component):
@@ -681,6 +714,7 @@ class ModeFullVector(object):
             raise ValueError('Unrecongnized field componenet "%s". The allowed'
                              'field components are Ex, Ey, Ez, Hx, Hy, Hz.' % (component))
 
+        # gather result to root process
         comm = MPI.COMM_WORLD
         x = self._x[i].getArray()[I0:I1]
         x_full = comm.gather(x, root=0)
@@ -688,6 +722,7 @@ class ModeFullVector(object):
         #scatter, x_full = PETSc.Scatter.toZero(x)
         #scatter.scatter(x, x_full, False, PETSc.Scatter.Mode.FORWARD)
 
+        # return result on root process
         if(NOT_PARALLEL):
             x_assembled = np.concatenate(x_full)
             field = np.reshape(x_assembled, (M,N))

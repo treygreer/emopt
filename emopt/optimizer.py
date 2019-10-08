@@ -41,14 +41,11 @@ The :class:`.Optimizer` is used approximately as follows:
 from __future__ import absolute_import
 
 from builtins import object
-from .misc import info_message, warning_message, error_message, RANK, \
-NOT_PARALLEL, run_on_master, COMM
+from .misc import info_message, warning_message, error_message
 
 import numpy as np
 from math import pi
 from abc import ABCMeta, abstractmethod
-from petsc4py import PETSc
-from mpi4py import MPI
 from scipy.optimize import minimize
 
 __author__ = "Andrew Michaels"
@@ -130,28 +127,6 @@ class Optimizer(object):
         optimization.
     """
 
-    class RunCommands(object):
-        """Run command codes used during message passing.
-
-        We need a way to signal the non-master nodes to perform different
-        operations during the optimization.  We do this by sending integers
-        from the master node to the other nodes containing a command code. The
-        commands are specified using an enum-like class.
-
-        Attributes
-        ----------
-        FOM : int
-            Tells worker nodes to compute the figure of merit
-        GRAD : int
-            Tells the worker nodes to compute the gradient of the figure of
-            merit
-        EXIT : int
-            Tells the worker nodes to finish.
-        """
-        FOM = 0
-        GRAD = 1
-        EXIT = 2
-
     def __init__(self, am, p0, callback_func=None, opt_method='BFGS', \
                  Nmax=1000, tol=1e-5, bounds=None, scipy_verbose=True):
         self.am = am
@@ -169,8 +144,6 @@ class Optimizer(object):
         self.bounds = bounds
         self.scipy_verbose = scipy_verbose
 
-        self._comm = MPI.COMM_WORLD
-
     def run(self):
         """Run the optimization.
 
@@ -181,83 +154,14 @@ class Optimizer(object):
         numpy.array
             The optimized design parameters
         """
-        command = None
-        running = True
-        params = np.zeros(self.p0.shape)
-        if(RANK == 0):
-            fom, params = self.run_sequence(self.am)
-        else:
-            while(running):
-                # Wait for commands from the master node
-                command = self._comm.bcast(command, root=0)
 
-                if(command == self.RunCommands.FOM):
-                    params = self._comm.bcast(params, root=0)
-                    self.am.fom(params)
-                elif(command == self.RunCommands.GRAD):
-                    params = self._comm.bcast(params, root=0)
-                    self.am.gradient(params)
-                elif(command == self.RunCommands.EXIT):
-                    running = False
-
-            fom = None
-            params = None
-
-        # share the final fom and parameters with all processes
-        fom = COMM.bcast(fom, root=0)
-        params = COMM.bcast(params, root=0)
-
-        return fom, params
-
-
-    def __fom(self, params):
-        # Execute the figure of merit in parallel
-        command = self.RunCommands.FOM
-        self._comm.bcast(command, root=0)
-        self._comm.bcast(params, root=0)
-        return self.am.fom(params)
-
-    def __gradient(self, params):
-        # Execute the figure of merit in parallel
-        command = self.RunCommands.GRAD
-        self._comm.bcast(command, root=0)
-        self._comm.bcast(params, root=0)
-        return self.am.gradient(params)
-
-    def run_sequence(self, am):
-        """Sequential optimization code.
-
-        In general, the optimization itself is run in parallel.  Instead, only
-        the calculation of the figure of merit and gradient takes advantage of
-        paralellism (which is where the bulk of the computational complexity
-        comes in).  This function defines the sequential optimization code and
-        makes calls to the parallel components.
-
-        Notes
-        -----
-        Override this method for custom functionality!
-
-        Parameters
-        ----------
-        am : :class:`emopt.adjoint_method.AdjointMethod`
-            The adjoint method object responsible for FOM and gradient
-            calculations.
-
-        Returns
-        -------
-        (float, numpy.ndarray)
-            The optimized figure of merit and the corresponding set of optimal
-            design parameters.
-        """
-        self.__fom(self.p0)
+        self.am.fom(self.p0)
         self.callback(self.p0)
-        result = minimize(self.__fom, self.p0, method=self.opt_method,
-                          jac=self.__gradient, callback=self.callback,
+        result = minimize(self.am.fom, self.p0, method=self.opt_method,
+                          jac=self.am.gradient, callback=self.callback,
                           tol=self.tol, bounds=self.bounds,
                           options={'maxiter':self.Nmax, \
                                    'disp':self.scipy_verbose})
 
-        command = self.RunCommands.EXIT
-        self._comm.bcast(command, root=0)
-
         return result.fun, result.x
+

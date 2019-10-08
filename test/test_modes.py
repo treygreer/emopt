@@ -2,6 +2,8 @@ import argparse
 import emopt
 import numpy as np
 import matplotlib.pyplot as plt
+from emopt.misc import NOT_PARALLEL, run_on_master
+import ipyparallel as ipp
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-s', '--symmetric', action='store_true')
@@ -9,7 +11,7 @@ args=parser.parse_args()
 
 normalize = 'maxHz'
 
-dxyz = 0.05
+dxyz = 0.01
 dx = dxyz # grid spacing along x
 dy = dxyz # grid spacing along y
 dz = dxyz # grid spacing along z
@@ -57,34 +59,36 @@ slc = emopt.misc.DomainCoordinates(port_offset, port_offset, # x
                                    0, Z,  # z
                                    dx, dy, dz)
 
+#####################################################################################
+# Generate the mode on the mpi farm
+#####################################################################################
+client = ipp.Client(profile='mpi')
+view_all = client[:] # run on all nodes
+view_all.block = True
+view_all.run('modes_worker.py')
+
+#####################################################################################
+# Get the fields from node 0
+#####################################################################################
+view_0 = client[0]
+view_0.block = True
+Ex = view_0['Ex']
+Ey = view_0['Ey']
+Ez = view_0['Ez']
+Hx = view_0['Hx']
+Hy = view_0['Hy']
+Hz = view_0['Hz']
+
 eps = make_eps()
 mu = make_mu()
-mode = emopt.modes.ModeFullVector(wavelength, eps, mu, slc, n0=3.45,
-                                  neigs=4)
-
-# The mode boundary conditions should match the simulation boundary conditions.
-# Mode is in the y-z plane, so the boundary conditions are H0
-mode.bc = 'HH' if args.symmetric else 'HH'
-mode.build()
-mode.solve()
-
-# get the Yee grid fields, work in non-permuted space for now
-M=0
-Ex = mode.get_field(M, 'Ex', permute=False, squeeze=True)
-Ey = mode.get_field(M, 'Ey', permute=False, squeeze=True)
-Ez = mode.get_field(M, 'Ez', permute=False, squeeze=True)
-Hx = mode.get_field(M, 'Hx', permute=False, squeeze=True)
-Hy = mode.get_field(M, 'Hy', permute=False, squeeze=True)
-Hz = mode.get_field(M, 'Hz', permute=False, squeeze=True)
-neff = mode.neff[M] * mode._dir
 
 if normalize == 'power':
     # normalize power to ~1.0
     S = 0.5*dx*dy*np.sum(Ex*np.conj(Hy)-Ey*np.conj(Hx))
     if args.symmetric:
-        S = S*2.0
-        Ex = Ex/np.sqrt(S); Ey = Ey/np.sqrt(S); Ez = Ez/np.sqrt(S)
-        Hx = Hx/np.sqrt(S); Hy = Hy/np.sqrt(S); Hz = Hz/np.sqrt(S)
+            S = S*2.0
+    Ex = Ex/np.sqrt(S); Ey = Ey/np.sqrt(S); Ez = Ez/np.sqrt(S)
+    Hx = Hx/np.sqrt(S); Hy = Hy/np.sqrt(S); Hz = Hz/np.sqrt(S)
 
 elif normalize == 'maxHz':
     # normlize maximum abs(Hz) to 1.0
@@ -103,24 +107,31 @@ mu_z  =  mu.get_values(slc.k1, slc.k2, slc.j1, slc.j2, slc.i1, slc.i2, koff=0.0,
 
 assert(eps_x.shape == Ex.shape)
 
-odx = mode.R/mode.dx # non-dimensionalize
-ody = mode.R/mode.dy # non-dimensionalize
+odx = view_0['mode.R/mode.dx'] # non-dimensionalize
+ody = view_0['mode.R/mode.dy'] # non-dimensionalize
+neff = view_0['mode.neff[0]']
 
 atol = 1e-7
+    
+lhs=0
+rhs=0
 
 def test_Ex():
+    global lhs, rhs
     dHzdy = np.diff(Hz, axis=0, prepend=Hz[[0],:]) * ody
     lhs = dHzdy + 1j*eps_x*Ex
     rhs = 1j*neff*Hy
     np.testing.assert_allclose(lhs, rhs, rtol=0,atol=atol)
 
 def test_Ey():
+    global lhs, rhs
     dHzdx = np.diff(Hz, axis=1, prepend=Hz[:,[0]]) * odx
     lhs = -dHzdx + 1j*eps_y*Ey
     rhs = -1j*neff*Hx
     np.testing.assert_allclose(lhs, rhs, rtol=0,atol=atol)
 
 def test_Ez():
+    global lhs, rhs
     dHydx = np.diff(Hy, axis=1, prepend=Hy[:,[0]]) * odx
     dHxdy = np.diff(Hx, axis=0, prepend=Hx[[0],:]) * ody
     lhs = dHydx - dHxdy + 1j*eps_z*Ez
@@ -128,6 +139,7 @@ def test_Ez():
     np.testing.assert_allclose(lhs, rhs, rtol=0,atol=atol)
 
 def test_Hx():
+    global lhs, rhs
     dEzdy = np.diff(Ez, axis=0, append=Ez[[-1],:]) * ody
     lhs = dEzdy - 1j*mu_x*Hx
     rhs = 1j*neff*Ey
@@ -135,6 +147,7 @@ def test_Hx():
     np.testing.assert_allclose(lhs, rhs, rtol=0,atol=atol)
 
 def test_Hy():
+    global lhs, rhs
     dEzdx = np.diff(Ez, axis=1, append=Ez[:,[-1]]) * odx
     lhs = -dEzdx - 1j*mu_y*Hy
     rhs = -1j*neff*Ex
@@ -142,6 +155,7 @@ def test_Hy():
     np.testing.assert_allclose(lhs, rhs, rtol=0,atol=atol)
 
 def test_Hz():
+    global lhs, rhs
     dEydx = np.diff(Ey, axis=1, append=Ey[:,[-1]]) * odx
     dExdy = np.diff(Ex, axis=0, append=Ex[[-1],:]) * ody
     lhs = dEydx - dExdy - 1j*mu_z*Hz

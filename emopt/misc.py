@@ -7,6 +7,7 @@ import numpy as np
 from scipy import interpolate
 from math import pi
 import os
+import sys
 
 from petsc4py import PETSc
 #import decorator # so that sphinx will document decorated functions :S
@@ -129,6 +130,7 @@ def info_message(message):
         The message to print.
     """
     print(u'\u001b[46;1m[INFO]\u001b[0m %s' % (message))
+    sys.stdout.flush()  # for MPI
 
 class EMOptWarning(RuntimeWarning):
     pass
@@ -143,6 +145,7 @@ def _warning_message(message, category=UserWarning, filename='', lineno=-1,
     else:
         print(u'\u001b[43;1m[WARNING]\u001b[0m in %s at line %d: %s' % \
               (filename, lineno, message))
+    sys.stdout.flush()  # for MPI
 warnings.showwarning = _warning_message
 
 
@@ -150,6 +153,7 @@ def warning_message(message, module):
     # Produce a warning message to warn the user that a problem has occurred.
     # This is primarily intended for internal use within emopt
     warnings.warn('in %s: %s' % (module, message), category=EMOptWarning)
+    sys.stdout.flush()  # for MPI
 
 def error_message(message):
     """Print a formatted, easily-distinguishable error message.
@@ -164,6 +168,7 @@ def error_message(message):
         The message to print.
     """
     print(u'\u001b[41;1m[ERROR]\u001b[0m %s' % (message))
+    sys.stdout.flush()  # for MPI
 
 
 class DomainCoordinates(object):

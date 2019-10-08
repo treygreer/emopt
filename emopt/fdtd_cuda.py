@@ -26,10 +26,12 @@ from builtins import range
 from builtins import object
 from .simulation import MaxwellSolver
 from .defs import FieldComponent
-from .misc import DomainCoordinates, info_message, warning_message
+from .misc import DomainCoordinates, RANK, MathDummy, NOT_PARALLEL, COMM, \
+info_message, warning_message, N_PROC, run_on_master
 from .fdtd_cuda_ctypes import libFDTD
 from .modes import ModeFullVector
 import sys
+from petsc4py import PETSc
 
 import numpy as np
 from math import pi
@@ -596,6 +598,8 @@ class FDTD(MaxwellSolver):
         return self._Z-self._w_pml[4]-self._w_pml[5]
 
     def set_materials(self, eps, mu):
+        if(self.verbose > 10):
+            info_message('fdtd_cuda:  set_materials() called')
         self._eps = eps
         self._mu = mu
 
@@ -665,6 +669,7 @@ class FDTD(MaxwellSolver):
                                 src.I, src.J, src.K,
                                 True)
 
+    @run_on_master
     def set_sources(self, src, domain, mindex=0):
         """Set a simulation source.
 
@@ -698,6 +703,7 @@ class FDTD(MaxwellSolver):
 
         self.__set_sources(src_arrays, domain, adjoint=False)
 
+    @run_on_master
     def set_adjoint_sources(self, src):
         """Set the adjoint sources.
 
@@ -723,6 +729,7 @@ class FDTD(MaxwellSolver):
         for dFdx, domain in zip(src[0], src[1]):
             self.add_adjoint_sources(dFdx, domain)
 
+    @run_on_master
     def add_adjoint_sources(self, src, domain):
         """Add an adjoint source.
 
@@ -738,6 +745,7 @@ class FDTD(MaxwellSolver):
         """
         self.__set_sources(src, domain, adjoint=True)
 
+    @run_on_master
     def clear_sources(self):
         """Clear simulation sources."""
         # Cleanup old source arrays -- not strictly necessary but it's nice to
@@ -745,11 +753,13 @@ class FDTD(MaxwellSolver):
         for src in self._sources: del src
         self._sources = []
 
+    @run_on_master
     def clear_adjoint_sources(self):
         """Clear the adjoint simulation sources."""
         for src in self._adj_sources: del src
         self._adj_sources = []
 
+    @run_on_master
     def build(self):
         """Assemble the stucture.
 
@@ -763,131 +773,39 @@ class FDTD(MaxwellSolver):
         mu = self._mu
 
         eps.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
-                       sx=0.5, sy=0.0, sz=-0.5,
+                       koff=0.5, joff=0.0, ioff=-0.5,
                        arr=self._eps_x)
 
         eps.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
-                       sx=0.0, sy=0.5, sz=-0.5,
+                       koff=0.0, joff=0.5, ioff=-0.5,
                        arr=self._eps_y)
 
         eps.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
-                       sx=0.0, sy=0.0, sz=0.0,
+                       koff=0.0, joff=0.0, ioff=0.0,
                        arr=self._eps_z)
 
         mu.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
-                      sx=0.0, sy=0.5, sz=0.0,
+                      koff=0.0, joff=0.5, ioff=0.0,
                       arr=self._mu_x)
 
         mu.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
-                       sx=0.5, sy=0.0, sz=0.0,
+                       koff=0.5, joff=0.0, ioff=0.0,
                        arr=self._mu_y)
 
         mu.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
-                       sx=0.5, sy=0.5, sz=-0.5,
+                       koff=0.5, joff=0.5, ioff=-0.5,
                        arr=self._mu_z)
+        if(self.verbose > 10):
+            info_message('Building FDTD system...done')
 
-    def update(self, bbox=None):
+    @run_on_master
+    def update(self):
         """Update the permittivity and permeability distribution.
-
-        A small portion of the whole simulation region can be updated by
-        supplying a bounding box which encompasses the desired region to be
-        updated.
-
-        Notes
-        -----
-        The bounding box accepted by this class is currently different from the
-        FDFD solvers in that it is specified using real-space coordinates not
-        indices. In the future, the other solvers will implement this same
-        functionality.
-
-        Parameters
-        ----------
-        bbox : list of floats (optional)
-            The region of the simulation which should be updated. If None, then
-            the whole region is updated. Format: [xmin, xmax, ymin, ymax, zmin,
-            zmax]
         """
-        if(bbox == None):
-            verbose = self.verbose
-            self.verbose = 0
-            self.build()
-            self.verbose = verbose
 
-        else:
-            eps = self._eps
-            mu = self._mu
-
-            bbox = DomainCoordinates(bbox[0], bbox[1], bbox[2], bbox[3],
-                                     bbox[4], bbox[5], self._dx,
-                                     self._dy, self._dz)
-            g_inds, l_inds, d_inds, sizes = self.__get_local_domain_overlap(bbox)
-            if(g_inds == None): return # no overlap between source and this chunk
-
-            temp = np.zeros([sizes[0], sizes[1], sizes[2]], dtype=np.complex128)
-
-            li = slice(l_inds[0], l_inds[0]+sizes[0])
-            lj = slice(l_inds[1], l_inds[1]+sizes[1])
-            lk = slice(l_inds[2], l_inds[2]+sizes[2])
-
-            # update eps_x
-            eps_x = self._eps_x
-            eps_x = np.reshape(eps_x, [self._Nz,self._Ny,self._Nx])
-            eps.get_values(g_inds[2], g_inds[2]+sizes[2],
-                           g_inds[1], g_inds[1]+sizes[1],
-                           g_inds[0], g_inds[0]+sizes[0],
-                           sx=0.5, sy=0.0, sz=-0.5,
-                           arr=temp)
-            eps_x[li, lj, lk] = temp
-
-            # update eps_y
-            eps_y = self._eps_y
-            eps_y = np.reshape(eps_y, [self._Nz,self._Ny,self._Nx])
-            eps.get_values(g_inds[2], g_inds[2]+sizes[2],
-                           g_inds[1], g_inds[1]+sizes[1],
-                           g_inds[0], g_inds[0]+sizes[0],
-                           sx=0.0, sy=0.5, sz=-0.5,
-                           arr=temp)
-            eps_y[li, lj, lk] = temp
-
-            # update eps_z
-            eps_z = self._eps_z
-            eps_z = np.reshape(eps_z, [self._Nz,self._Ny,self._Nx])
-            eps.get_values(g_inds[2], g_inds[2]+sizes[2],
-                           g_inds[1], g_inds[1]+sizes[1],
-                           g_inds[0], g_inds[0]+sizes[0],
-                           sx=0.0, sy=0.0, sz=0.0,
-                           arr=temp)
-            eps_z[li, lj, lk] = temp
-
-            # update mu_x
-            mu_x = self._mu_x
-            mu_x = np.reshape(mu_x, [self._Nz,self._Ny,self._Nx])
-            mu.get_values(g_inds[2], g_inds[2]+sizes[2],
-                          g_inds[1], g_inds[1]+sizes[1],
-                          g_inds[0], g_inds[0]+sizes[0],
-                          sx=0.0, sy=0.5, sz=0.0,
-                          arr=temp)
-            mu_x[li, lj, lk] = temp
-
-            # update mu_y
-            mu_y = self._mu_y
-            mu_y = np.reshape(mu_y, [self._Nz,self._Ny,self._Nx])
-            mu.get_values(g_inds[2], g_inds[2]+sizes[2],
-                          g_inds[1], g_inds[1]+sizes[1],
-                          g_inds[0], g_inds[0]+sizes[0],
-                          sx=0.5, sy=0.0, sz=0.0,
-                          arr=temp)
-            mu_y[li, lj, lk] = temp
-
-            # update mu_z
-            mu_z = self._mu_z
-            mu_z = np.reshape(mu_z, [self._Nz,self._Ny,self._Nx])
-            mu.get_values(g_inds[2], g_inds[2]+sizes[2],
-                          g_inds[1], g_inds[1]+sizes[1],
-                          g_inds[0], g_inds[0]+sizes[0],
-                          sx=0.5, sy=0.5, sz=-0.5,
-                          arr=temp)
-            mu_z[li, lj, lk] = temp
+        if(self.verbose > 10):
+            info_message('fdtd_cuda:  update() called')
+        self.build()
 
     def __solve(self):
         ## Solve Maxwell's equations. This process is identical for the forward
@@ -953,7 +871,7 @@ class FDTD(MaxwellSolver):
                                 'emopt.fdtd')
                 break
 
-            if self.verbose>10:
+            if self.verbose>100:
                 for i in range(Tn):
                     libFDTD.FDTD_update(self._libfdtd, n*dt, 1)
                     n += 1;
@@ -1032,7 +950,7 @@ class FDTD(MaxwellSolver):
             A_change = np.linalg.norm(A1-A0)/np.linalg.norm(A0)
             phi_change = np.linalg.norm(phi1-phi0)/np.linalg.norm(phi0)
 
-            if(self.verbose > 1):  # and n > 2*Tn):
+            if(self.verbose > 100):  # and n > 2*Tn):
                 print(f'phi1={phi1}')
                 print(f'A1={A1}')
                 print('time step: {0: <8d} Delta A: {1: <12.4e} ' \
@@ -1055,6 +973,7 @@ class FDTD(MaxwellSolver):
         print(f'executed {n} timesteps')
         libFDTD.FDTD_calc_complex_fields_3T(self._libfdtd, t0, t1, t2)
 
+    @run_on_master
     def solve_forward(self):
         """Run a forward simulation.
 
@@ -1105,6 +1024,7 @@ class FDTD(MaxwellSolver):
         Psrc = self.get_source_power()
         self._source_power = Psrc
 
+    @run_on_master
     def solve_adjoint(self):
         """Run an adjoint simulation.
 
@@ -1152,6 +1072,7 @@ class FDTD(MaxwellSolver):
 
         self.__solve()
 
+    @run_on_master
     def update_saved_fields(self):
         """Update the fields contained in the regions specified by
         self.field_domains.
@@ -1201,6 +1122,7 @@ class FDTD(MaxwellSolver):
         fout = field.copy().reshape(self._Nz, self._Ny, self._Nx)  # FIXME: Why copy()???
         return fout[domain.i, domain.j, domain.k]
 
+    @run_on_master
     def get_field(self, component, domain=None):
         """Get the (raw, uninterpolated) field.
 
@@ -1222,6 +1144,7 @@ class FDTD(MaxwellSolver):
         """
         return self.__get_field(component, domain, adjoint=False)
 
+    @run_on_master
     def get_adjoint_field(self, component, domain=None):
         """Get the adjoint field.
 
@@ -1241,6 +1164,7 @@ class FDTD(MaxwellSolver):
         """
         return self.__get_field(component, domain, adjoint=True)
 
+    @run_on_master
     def get_field_interp(self, component, domain=None, squeeze=False):
         """Get the desired field component.
 
@@ -1392,6 +1316,7 @@ class FDTD(MaxwellSolver):
             if(squeeze): return np.squeeze(field)
             else: return field
 
+    @run_on_master
     def get_source_power(self):
         """Get source power.
 
@@ -1503,6 +1428,7 @@ class FDTD(MaxwellSolver):
 
         return Psrc
 
+    @run_on_master
     def get_A_diag(self):
         """Get a representation of the diagonal of the discretized Maxwell's
         equations assuming they are assembled in a matrix in the frequency
@@ -1528,6 +1454,7 @@ class FDTD(MaxwellSolver):
 
         return (eps_x, eps_y, eps_z, mu_x, mu_y, mu_z)
 
+    @run_on_master
     def calc_ydAx(self, Adiag0):
         """Calculate the product y^T*dA*x.
 
@@ -1553,6 +1480,7 @@ class FDTD(MaxwellSolver):
 
         return np.sum(ydAx)
 
+    @run_on_master
     def test_src_func(self):
         import matplotlib.pyplot as plt
 

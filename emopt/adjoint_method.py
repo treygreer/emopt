@@ -152,15 +152,12 @@ from __future__ import absolute_import
 
 from builtins import range
 from builtins import object
-from .misc import info_message, warning_message, error_message, RANK, \
-NOT_PARALLEL, run_on_master, N_PROC, COMM
+from .misc import info_message, warning_message, error_message
 from . import fomutils
 
 import numpy as np
 from math import pi
 from abc import ABCMeta, abstractmethod
-from petsc4py import PETSc
-from mpi4py import MPI
 from future.utils import with_metaclass
 
 __author__ = "Andrew Michaels"
@@ -224,9 +221,6 @@ class AdjointMethod(with_metaclass(ABCMeta, object)):
     calc_dFdx(sim, params)
         **(ABSTRACT METHOD)** Calculate the derivative of the figure of merit
         with respect to the electric and magnetic field vectors.
-    get_update_boxes(sim, params)
-        Define update boxes which specify which portion of the underlying
-        spatial grid is modified by each design variable.
     fom(params)
         Get the figure of merit.
     calc_gradient(sim, params)
@@ -372,44 +366,6 @@ class AdjointMethod(with_metaclass(ABCMeta, object)):
         """
         pass
 
-    def get_update_boxes(self, sim, params):
-        """Get update boxes used to speed up the updating of A.
-
-        In order to compute the gradient, we need to calculate how A changes
-        with respect to modification of the design variables.  This generally
-        requires updating the material values in A.  We can speed this process
-        up by only updating the part of the system which is affect by the
-        modification of each design variable.
-
-        By default, the update boxes cover the whole simulation area.  This
-        method can be overriden in order to modify this behavior.
-
-        Parameters
-        ----------
-        sim : FDFD
-            Simulation object.  sim = self.sim
-        params : numpy.array or list of floats
-            List of design parameters.
-
-        Returns
-        -------
-            Either a list of tuples or a list of lists of tuples containing
-            (xmin, xmax, ymin, ymax) in 2D and (xmin, xmax, ymin, ymax, zmin,
-            zmax) in 3D which describes which portion of the system should be
-            update during gradient calculations.
-        """
-        if(sim.ndims == 2):
-            X = sim.X
-            Y = sim.Y
-            lenp = len(params)
-            return [(0, X, 0, Y) for i in range(lenp)]
-        elif(sim.ndims == 3):
-            X = sim.X
-            Y = sim.Y
-            Z = sim.Z
-            lenp = len(params)
-            return [(0,X,0,Y,0,Z) for i in range(lenp)]
-
     def fom(self, params):
         """Run a forward simulation and calculate the figure of merit.
 
@@ -488,58 +444,27 @@ class AdjointMethod(with_metaclass(ABCMeta, object)):
         Ai = sim.get_A_diag()
 
         step = self._step
-        update_boxes = self.get_update_boxes(sim, params)
         lenp = len(params)
-
-        grad_full = None
-        grad_parts = []
-        if(RANK == 0):
-            grad_full = np.zeros(N_PROC, dtype=np.double)
 
         gradient = np.zeros(lenp)
         for i in range(lenp):
             p0 = params[i]
-            ub = update_boxes[i]
 
             # perturb the system
             params[i] += step
             self.update_system(params)
-            if(type(ub[0]) == list or type(ub[0]) == np.ndarray or \
-               type(ub[0]) == tuple):
-                for box in ub:
-                    self.sim.update(box)
-            else:
-                self.sim.update(ub)
+            self.sim.update()
 
-            # calculate dAdp and assemble the full result on the master node
+            # calculate dAdp 
             product = sim.calc_ydAx(Ai)
-            grad_part = -2*np.real( product/step )
-            grad_parts.append(grad_part)
+            gradient[i] = -2*np.real( product/step )
 
             # revert the system to its original state
             params[i] = p0
             self.update_system(params)
-            if(type(ub[0]) == list or type(ub[0]) == np.ndarray or \
-               type(ub[0]) == tuple):
-                for box in ub:
-                    self.sim.update(box)
-            else:
-                self.sim.update(ub)
+            self.sim.update()
 
-
-        COMM.Barrier()
-        for i in range(lenp):
-            # send the partially computed gradient to the master node to finish
-            # up the calculation
-            #COMM.Gather(grad_parts[i], grad_full, root=0)
-            grad_full = COMM.gather(grad_parts[i], root=0)
-
-            # finish calculating the gradient
-            if(NOT_PARALLEL):
-                gradient[i] = np.sum(grad_full)
-
-        if(NOT_PARALLEL):
-            return gradient
+        return gradient
 
     def gradient(self, params):
         """Manage the calculation of the gradient figure of merit.
@@ -571,31 +496,23 @@ class AdjointMethod(with_metaclass(ABCMeta, object)):
         # get dFdx which will be used as the source for the adjoint simulation
         # dFdx is calculated on the root node and then broadcast to the other
         # nodes.
-        # TODO: parallelize this operation?
-        comm = MPI.COMM_WORLD
+        #comm = MPI.COMM_WORLD
 
         # This should return only non-null on RANK=0
         dFdx = self.calc_dFdx(self.sim, params)
 
-        #if(isinstance(self.sim, fdfd.FDFD_TE)):
-        dFdx = comm.bcast(dFdx, root=0)
-        #elif(isinstance(self.sim, fdfd.FDFD_3D)):
-        #    pass
+        #dFdx = comm.bcast(dFdx, root=0)
 
         # run the adjoint source
         self.sim.set_adjoint_sources(dFdx)
         self.sim.solve_adjoint()
 
-        if(NOT_PARALLEL):
-            info_message('Calculating gradient...')
+        info_message('Calculating gradient...')
 
         grad_f = self.calc_gradient(self.sim, params)
         grad_p = self.calc_grad_p(self.sim, params)
 
-        if(NOT_PARALLEL):
-            return grad_f + grad_p
-        else:
-            return None
+        return grad_f + grad_p
 
     def check_gradient(self, params, indices=[], plot=True, verbose=True,
                        return_gradients=False, fd_step=1e-10):
@@ -653,11 +570,11 @@ class AdjointMethod(with_metaclass(ABCMeta, object)):
         fom0 = self.fom(params)
 
         # calculate the "true" derivatives using finite differences
-        if(NOT_PARALLEL and verbose):
+        if(verbose):
             info_message('Checking gradient...')
 
         for i in range(len(indices)):
-            if(NOT_PARALLEL and verbose):
+            if(verbose):
                 print('\tDerivative %d of %d' % (i+1, len(indices)))
 
             j = indices[i]
@@ -920,404 +837,6 @@ class AdjointMethodMO(with_metaclass(ABCMeta, AdjointMethod)):
                                                            return_gradients,
                                                            fd_step)
 
-class AdjointMethodFM2D(AdjointMethod):
-    """Define an :class:`.AdjointMethod` which simplifies the calculation of
-    gradients which are a function of the materials (eps and mu) in 2D
-    problems.
-
-    In certain cases, the gradient of a function of the fields, permittivity,
-    and permeability may be desired.  Differentiating the function with respect
-    to the permittivity and permeability shares many of the same calculations
-    in common with :meth:`.AdjointMethod.calc_gradient`.  In order to maximize
-    performance and simplify the implementation of material-dependent figures
-    of merit, this class reimplements the :meth:`calc_gradient` function.
-
-    Attributes
-    ----------
-    sim : :class:`emopt.fdfd.FDFD`
-        The simulation object
-    step : float (optional)
-        The step size used by gradient calculation (default = False)
-    """
-    def __init__(self, sim, step=1e-8):
-        super(AdjointMethodFM2D, self).__init__(sim, step)
-
-    @abstractmethod
-    def calc_dFdm(self, sim, params):
-        """Calculate the derivative of F with respect to :math:`\epsilon`,
-        :math:`\epsilon^*`, :math:`\mu`, and :math:`\mu^*`
-
-        Parameters
-        ----------
-        sim : emopt.fdfd.FDFD
-            The FDFD simulation object.
-        params : numpy.ndarray
-            The current set of design variables
-
-        Returns
-        -------
-        tuple of numpy.array
-            The derivatives of F with respect to spatially-dependent eps and mu
-            and their complex conjugates. These derivatives should be arrays
-            with dimension (M,N) and should be returned in a tuple with the
-            format (dFdeps, dFdeps_conf, dFdmu, dFdmu_conj)
-        """
-        pass
-
-    def calc_gradient(self, sim, params):
-        """Calculate the gradient of a figure of merit which depends on the
-        permittivity and permeability.
-
-        Parameters
-        ----------
-        sim : FDFD
-            Simulation object.  sim = self.sim
-        params : numpy.array or list of floats
-            List of design parameters.
-
-        Returns
-        -------
-        numpy.array
-            **(Master node only)** Gradient of figure of merit, i.e. list of
-            derivatives of fom with respect to each design variable
-        """
-        # Semantically, we would not normally need to override this method,
-        # however it turns out that the operations needed to compute the
-        # gradient of a field-dependent function and a permittivit-dependent
-        # function are very similar (both require the calculation of the
-        # derivative of the materials wrt the design parameters.)  For the sake
-        # of performance, we combine the two calculations here.
-
-        w_pml_l = sim.w_pml_left
-        w_pml_r = sim.w_pml_right
-        w_pml_t = sim.w_pml_top
-        w_pml_b = sim.w_pml_bottom
-        M = sim.M
-        N = sim.N
-        X = sim.X
-        Y = sim.Y
-
-        # get the current diagonal elements of A.
-        # only these elements change when the design variables change.
-        Af = PETSc.Vec()
-        Ai = sim.get_A_diag()
-
-        # Get the derivatives w.r.t. eps, mu
-        if(NOT_PARALLEL):
-            dFdeps, dFdeps_conj, dFdmu, dFdmu_conj = self.calc_dFdm(sim, params)
-
-        step = self._step
-        update_boxes = self.get_update_boxes(sim, params)
-        lenp = len(params)
-
-        grad_full = None
-        if(RANK == 0):
-            grad_full = np.zeros(sim.nunks, dtype=np.double)
-
-        gradient = np.zeros(lenp)
-        for i in range(lenp):
-            #if(NOT_PARALLEL):
-            #    print i
-            p0 = params[i]
-            ub = update_boxes[i]
-
-            # perturb the system
-            params[i] += step
-            self.update_system(params)
-            if(type(ub[0]) == list or type(ub[0]) == np.ndarray or \
-               type(ub[0]) == tuple):
-                for box in ub:
-                    self.sim.update(box)
-            else:
-                self.sim.update(ub)
-
-            # calculate derivative via y^T*dA/dp*x
-            product = sim.calc_ydAx(Ai)
-            grad_part = -2*np.real( product/step )
-
-            # send the partially computed gradient to the master node to finish
-            # up the calculation
-            #MPI.COMM_WORLD.Gather(grad_part, grad_full, root=0)
-            grad_full = MPI.COMM_WORLD.gather(grad_part, root=0)
-
-            # We also need dAdp to account for the derivative of eps and mu
-            # get the updated diagonal elements of A
-            Af = sim.get_A_diag(Af)
-            dAdp = (Af-Ai)/step
-            gatherer, dAdp_full = PETSc.Scatter().toZero(dAdp)
-            gatherer.scatter(dAdp, dAdp_full, False, PETSc.Scatter.Mode.FORWARD)
-
-            # finish calculating the gradient
-            if(NOT_PARALLEL):
-                # derivative with respect to fields
-                gradient[i] = np.sum(grad_full)
-
-                # Next we compute the derivative with respect to eps and mu. We
-                # exclude the PML regions because changes to the materials in
-                # the PMLs are generally not something we want to consider.
-                # TODO: make compatible with multiple update boxes...
-                jmin = int(np.floor(ub[0]/X*N)); jmax = int(np.ceil(ub[1]/X*N))
-                imin = int(np.floor(ub[2]/Y*M)); imax = int(np.ceil(ub[3]/Y*M))
-                if(jmin < w_pml_l): jmin = w_pml_l
-                if(jmax > N-w_pml_r): jmax = N-w_pml_r
-                if(imin < w_pml_b): imin = w_pml_b
-                if(imax > M-w_pml_t): imax = M-w_pml_t
-
-                # note that the extraction of eps and mu from A must be handled
-                # slightly differently in the TE and TM cases since the signs
-                # along the diagonal are swapped and eps and mu are positioned
-                # in different parts
-                # NOTE: magic number 3 is number of field components
-                if(isinstance(sim, fdfd.FDFD_TM)):
-                    dmudp = dAdp_full[0::3].reshape([M,N]) * 1j
-                    depsdp = dAdp_full[1::3].reshape([M,N]) / 1j
-                elif(isinstance(sim, fdfd.FDFD_TE)):
-                    depsdp = dAdp_full[0::3].reshape([M,N]) / 1j
-                    dmudp = dAdp_full[1::3].reshape([M,N]) * 1j
-
-                gradient[i] += np.real(
-                               np.sum(dFdeps[imin:imax, jmin:jmax] * \
-                                      depsdp[imin:imax, jmin:jmax]) + \
-                               np.sum(dFdeps_conj[imin:imax, jmin:jmax] * \
-                                      np.conj(depsdp[imin:imax, jmin:jmax])) + \
-                               np.sum(dFdmu[imin:imax, jmin:jmax] * \
-                                      dmudp[imin:imax, jmin:jmax]) + \
-                               np.sum(dFdmu_conj[imin:imax, jmin:jmax] * \
-                                      np.conj(dmudp[imin:imax, jmin:jmax])) \
-                               )
-
-            # revert the system to its original state
-            params[i] = p0
-            self.update_system(params)
-            if(type(ub[0]) == list or type(ub[0]) == np.ndarray or \
-               type(ub[0]) == tuple):
-                for box in ub:
-                    self.sim.update(box)
-            else:
-                self.sim.update(ub)
-
-        if(NOT_PARALLEL):
-            return gradient
-
-class AdjointMethodPNF2D(AdjointMethodFM2D):
-    """Define an AdjointMethod object for a figure of merit which contains
-    power normalization in 2D problems.
-
-    A power-normalized figure of merit has the form
-
-    .. math::
-        F(\\mathbf{E}, \\mathbf{H}, \\epsilon, \\mu) = \\frac{f(\\mathbf{E},
-        \\mathbf{H})} {P_\mathrm{src}(\\mathbf{E}, \\mathbf{H}, \\epsilon, \\mu)}
-
-    where :math:`\\epsilon` and :math:`\\mu` are the permittivity and
-    permeability and :math:`f(...)` is a figure of merit which depends only on
-    the fields (e.g. power flowing through a plane, mode match, etc)
-    """
-
-    def __init__(self, sim, step=1e-8):
-        super(AdjointMethodPNF2D, self).__init__(sim, step)
-
-    @abstractmethod
-    def calc_f(self, sim, params):
-        """Calculate the non-power-normalized figure of merit
-        :math:`f(\\mathbf{E}, \\mathbf{H})`.
-
-        Parameters
-        ----------
-        sim : emopt.fdfd.FDFD
-            The FDFD simulation object.
-        params : numpy.ndarray
-            The current set of design variables
-
-        Returns
-        -------
-        float
-            The value of the non-power-normalized figure of merit.
-        """
-        pass
-
-    @abstractmethod
-    def calc_dfdx(self, sim, params):
-        """Calculate the derivative of the non-power-normalized figure of merit
-        with respect to the fields in the discretized grid.
-
-        Parameters
-        ----------
-        sim : emopt.fdfd.FDFD
-            The FDFD simulation object.
-        params : numpy.ndarray
-            The current set of design variables
-
-        Returns
-        -------
-        tuple of numpy.ndarray
-            The derivative of f with respect to the fields in the form (E, H)
-        """
-        pass
-
-    def calc_penalty(self, sim, params):
-        """Calculate the additive contribution to the figure of merit by
-        explicit functions of the design variables.
-
-        Because of the power normalization, we have to handle contributions to
-        the figure of merit which depend explicitly on the design variables
-        separately. This function returns the value of the functional Q(p)
-        where Q(p) is given by F = f(E,H,p)/Psrc + Q(p).
-
-        This is typically used to impose penalties to the figure of merit
-        (hence the name of the function).
-
-        Parameters
-        ----------
-        sim : emopt.fdfd.FDFD
-            The FDFD simulation object.
-        params : numpy.ndarray
-            The current set of design variables
-
-        Returns
-        -------
-        tuple of numpy.ndarray
-            The value of the penalty function
-        """
-        return 0.0
-
-
-    def calc_fom(self, sim, params):
-        """Calculate the power-normalized figure of merit.
-
-        Parameters
-        ----------
-        sim : emopt.fdfd.FDFD
-            The FDFD simulation object.
-        params : numpy.ndarray
-            The current set of design variables
-
-        Returns
-        -------
-        float
-            The value of the power-normalized figure of merit.
-        """
-        f = self.calc_f(sim, params)
-        penalty = self.calc_penalty(sim, params)
-        Psrc = sim.get_source_power()
-
-        if(NOT_PARALLEL):
-            return f / Psrc + penalty
-        else:
-            return None
-
-    def calc_dFdx(self, sim, params):
-        """Calculate the derivative of the power-normalized figure of merit
-        with respect to the field.
-
-        Parameters
-        ----------
-        sim : emopt.fdfd.FDFD
-            The FDFD simulation object.
-        params : numpy.ndarray
-            The current set of design variables
-
-        Returns
-        -------
-        tuple of numpy.ndarray
-            The derivative of F with respect to the fields in the form (E, H)
-        """
-        dfdx = self.calc_dfdx(sim, params)
-        f = self.calc_f(sim, params)
-
-        if(NOT_PARALLEL):
-            if(isinstance(sim, fdfd.FDFD_TM)):
-                dfdHz = dfdx[0]
-                dfdEx = dfdx[1]
-                dfdEy = dfdx[2]
-
-                dFdHz, dFdEx, dFdEy = fomutils.power_norm_dFdx_TM(sim, f, dfdHz, \
-                                                                          dfdEx, \
-                                                                          dfdEy)
-                return (dFdHz, dFdEx, dFdEy)
-            elif(isinstance(sim, fdfd.FDFD_TE)):
-                dfdEz = dfdx[0]
-                dfdHx = dfdx[1]
-                dfdHy = dfdx[2]
-
-                dFdEz, dFdHx, dFdHy = fomutils.power_norm_dFdx_TE(sim, f, dfdEz, \
-                                                                          dfdHx, \
-                                                                          dfdHy)
-                return (dFdEz, dFdHx, dFdHy)
-        else:
-            return None
-
-    def calc_dFdm(self, sim, params):
-        """Calculate the derivative of the power-normalized figure of merit
-        with respect to the permittivity and permeability.
-
-        Parameters
-        ----------
-        sim : emopt.fdfd.FDFD
-            The FDFD simulation object.
-        params : numpy.ndarray
-            The current set of design variables
-
-        Returns
-        -------
-        list of numpy.ndarray
-            (Master node only) The derivative of F with respect to :math:`\epsilon`,
-            :math:`\epsilon^*`, :math:`\mu`, and :math:`\mu^*`
-        """
-        # isinstance(sim, fdfd.FDFD_TM) must come before TE since TM is a
-        # subclass of TE
-        if(isinstance(sim, fdfd.FDFD_TM)):
-            M = sim.M
-            N = sim.N
-            dx = sim.dx
-            dy = sim.dy
-
-            Hz = sim.get_field_interp('Hz')
-            Ex = sim.get_field_interp('Ex')
-            Ey = sim.get_field_interp('Ey')
-
-            # compute the magnitudes squared of E and H -- this is all we need
-            # here.
-            if(NOT_PARALLEL):
-                E2 = Ex * np.conj(Ex) + Ey * np.conj(Ey)
-                H2 = Hz * np.conj(Hz)
-
-        elif(isinstance(sim, fdfd.FDFD_TE)):
-            M = sim.M
-            N = sim.N
-            dx = sim.dx
-            dy = sim.dy
-
-            Ez = sim.get_field_interp('Ez')
-            Hx = sim.get_field_interp('Hx')
-            Hy = sim.get_field_interp('Hy')
-
-            # compute the magnitudes squared of E and H -- this is all we need
-            # here.
-            if(NOT_PARALLEL):
-                E2 = Ez * np.conj(Ez)
-                H2 = Hx * np.conj(Hx) + \
-                     Hy * np.conj(Hy)
-
-        if(NOT_PARALLEL):
-            #y1 = eps, y2 = eps^*, y3 = mu, y4 = mu^*
-            dPdy1 = -1j*0.125 * dx * dy * E2
-            dPdy2 = 1j*0.125 * dx * dy * E2
-            dPdy3 = -1j*0.125 * dx * dy * H2
-            dPdy4 = 1j*0.125 * dx * dy * H2
-
-            f = self.calc_f(sim, params)
-            Ptot = sim.get_source_power()
-
-            dFdy1 = -f / Ptot**2 * dPdy1
-            dFdy2 = -f / Ptot**2 * dPdy2
-            dFdy3 = -f / Ptot**2 * dPdy3
-            dFdy4 = -f / Ptot**2 * dPdy4
-
-            return dFdy1, dFdy2, dFdy3, dFdy4
-        else:
-            return None
-
 class AdjointMethodPNF3D(AdjointMethod):
     """Define an AdjointMethod object for a figure of merit which contains
     power normalization in 3D problems.
@@ -1425,11 +944,7 @@ class AdjointMethodPNF3D(AdjointMethod):
         f = self.calc_f(sim, params)
         penalty = self.calc_penalty(sim, params)
         Psrc = sim.source_power
-
-        if(NOT_PARALLEL):
-            return f / Psrc + penalty
-        else:
-            return None
+        return f / Psrc + penalty
 
     def calc_dFdx(self, sim, params):
         """Calculate the derivative of the power-normalized figure of merit
@@ -1450,23 +965,17 @@ class AdjointMethodPNF3D(AdjointMethod):
         fom = self.calc_f(sim, params)
         dfdxs = self.calc_dfdx(sim, params)
         domains = self.get_fom_domains()
-
-        domains = COMM.bcast(domains, root=0)
         Nderiv = len(domains)
 
         adjoint_sources = [[], []]
         for i in range(Nderiv):
-            if(NOT_PARALLEL):
-                dfdx = dfdxs[i]
-                dFdEx = dfdx[0]
-                dFdEy = dfdx[1]
-                dFdEz = dfdx[2]
-                dFdHx = dfdx[3]
-                dFdHy = dfdx[4]
-                dFdHz = dfdx[5]
-            else:
-                dFdEx = None; dFdEy = None; dFdEz = None
-                dFdHx = None; dFdHy = None; dFdHz = None
+            dfdx = dfdxs[i]
+            dFdEx = dfdx[0]
+            dFdEy = dfdx[1]
+            dFdEz = dfdx[2]
+            dFdHx = dfdx[3]
+            dFdHy = dfdx[4]
+            dFdHz = dfdx[5]
 
             fom_domain = domains[i]
             a_src = fomutils.power_norm_dFdx_3D(sim, fom,
