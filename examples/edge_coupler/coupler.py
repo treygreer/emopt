@@ -8,7 +8,7 @@ import numpy as np
 import scipy
 from scipy import interpolate
 import matplotlib.pyplot as plt
-from emopt.misc import NOT_PARALLEL, run_on_master, RANK
+from emopt.misc import NOT_PARALLEL, run_on_master, RANK, info_message
 from sys import stdout
 import splines
 import pandas
@@ -27,7 +27,7 @@ H_BOX = 2.0
 INPUT_MFD = 2.5 # mode field diameter of impinging light at facet
 W_WG = 0.45     # output waveguide width (y dimension, total width)
 
-DXYZ = 0.02
+DXYZ = 0.04
 DX = DXYZ # grid spacing along x
 DY = DXYZ # grid spacing along y
 DZ = DXYZ # grid spacing along z
@@ -207,10 +207,10 @@ class MMISplitterAdjointMethod(AdjointMethodPNF3D):
 
     @run_on_master
     def calc_f(self, sim, param_vector):
-        """Calculate the figure of merit.
+        """Calculate the mode match based portion of the figure of merit.
 
-        The FOM is the mode overlap between the simulated fields and the
-        fundamental super mode of the output waveguides.
+        This portion of the  FOM is minus the mode overlap between the
+        simulated fields and the fundamental super mode of the output waveguides.
         """
         Ex, Ey, Ez, Hx, Hy, Hz = sim.saved_fields[0]
 
@@ -221,7 +221,7 @@ class MMISplitterAdjointMethod(AdjointMethodPNF3D):
 
     @run_on_master
     def calc_dfdx(self, sim, params):
-        """Calculate the figure of merit with respect to E and H.
+        """Calculate the derivative of the figure of merit with respect to E and H.
 
         Note: our function is normalized with respect to the total source
         power and our derivative needs to account for this`*`. Currently,
@@ -259,7 +259,7 @@ class MMISplitterAdjointMethod(AdjointMethodPNF3D):
         crv_cost = 1.0 * splines.curvature_cost(params.spline,
                                                 min_radius=0.5)
         
-        print(f'   rank={RANK} calc_penalty: crv_cost = {crv_cost}')
+        print(f'   calc_penalty: crv_cost = {crv_cost}')
         return crv_cost
 
     @run_on_master
@@ -308,6 +308,11 @@ def plot_update(params, fom_list, sim, am):
 
     fname = 'data/coupler{:03d}'.format(len(fom_list))
     emopt.io.save_results(fname, data)
+
+
+    mode_match = am.mode_match.get_mode_match_forward()
+    info_message(f"mode_match={mode_match}, source_power={sim.source_power}, \
+    ratio={mode_match/sim.source_power}")
 
 
 wavelength = 1.55
@@ -428,7 +433,7 @@ if NOT_PARALLEL:
     #####################################################################################
     # L-BFGS-B will print out the iteration number and FOM value
     fom_list = []
-    callback = lambda x : plot_update(x, fom_list, sim, am)
+    callback = lambda parms : plot_update(parms, fom_list, sim, am)
     max_iters = 30
     initial_params = Params.initial_values()
     opt = emopt.optimizer.Optimizer(am, initial_params, Nmax=max_iters, opt_method='L-BFGS-B',

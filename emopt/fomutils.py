@@ -1020,7 +1020,7 @@ class ModeMatch(object):
         self.mode_match_fwd = 0.5 * self.am * np.conj(self.am) * np.real(self.Pm)
         self.mode_match_back = 0.5 * self.bm * np.conj(self.bm) * np.real(self.Pm)
 
-    def get_mode_match_forward(self, P_in):
+    def get_mode_match_forward(self, P_in=1.0):
         """Get the mode match in the forward direction normalized with respect to
         a desired power.
 

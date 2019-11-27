@@ -48,7 +48,7 @@ slepc4py.init(sys.argv)
 
 from .defs import FieldComponent
 from .misc import info_message, warning_message, error_message, \
-NOT_PARALLEL, run_on_master, MathDummy
+NOT_PARALLEL, run_on_master, MathDummy, RANK
 
 from petsc4py import PETSc
 from slepc4py import SLEPc
@@ -269,7 +269,6 @@ class ModeFullVector(object):
         -----
         This function is run on all nodes.
         """
-        rank = PETSc.COMM_WORLD.getRank()
         if(self.verbose and NOT_PARALLEL):
             info_message('Building mode solver system matrix...')
 
@@ -295,7 +294,7 @@ class ModeFullVector(object):
         i0 = self.domain.i1   # [i,j,k] are in domain space
         j0 = self.domain.j1
         k0 = self.domain.k1
-        print(f"rank {rank} self.ndir={self.ndir}")
+        print(f"rank {RANK} self.ndir={self.ndir}")
         sys.stdout.flush()
 
         if NOT_PARALLEL:
@@ -341,7 +340,7 @@ class ModeFullVector(object):
         mu_y  = comm.bcast(mu_y,  root=0)
         mu_z  = comm.bcast(mu_z,  root=0)
 
-        print(f"************************************** rank {rank} self.ib={self.ib}, self.id={self.ie}");
+        print(f"************************************** rank {RANK} self.ib={self.ib}, self.id={self.ie}");
         print(f"eps_x.shape={eps_x.shape}")
         sys.stdout.flush()
 
@@ -516,15 +515,15 @@ class ModeFullVector(object):
                     else:
                         A[I, JHx1] = 0
 
-        print(f"************************************** node {rank} assembling A");
+        print(f"************************************** node {RANK} assembling A");
         print(f"eps_x.shape={eps_x.shape}")
         sys.stdout.flush()
         self._A.assemble()
-        print(f"************************************** node {rank} assembling B");
+        print(f"************************************** node {RANK} assembling B");
         print(f"eps_x.shape={eps_x.shape}")
         sys.stdout.flush()
         self._B.assemble()
-        print(f"************************************** node {rank} done assembling B");
+        print(f"************************************** node {RANK} done assembling B");
         sys.stdout.flush()
 
     def solve(self):
@@ -534,12 +533,8 @@ class ModeFullVector(object):
         -----
         This function is run on all nodes.
         """
-        #if(self.verbose and NOT_PARALLEL):
-        #    info_message('Solving...')
-        rank = PETSc.COMM_WORLD.getRank()
-        print(f"************************************** node {rank} solving");
-        sys.stdout.flush()
-            
+        if(self.verbose and NOT_PARALLEL):
+            info_message('Solving...')
 
         # Setup the solve options. We are solving a generalized non-hermitian
         # eigenvalue problem (GNHEP)
@@ -571,6 +566,48 @@ class ModeFullVector(object):
             self._neff[i] = self._solver.getEigenvalue(i)
             self._solver.getEigenvector(i, self._x[i])
 
+    def build_gaussian_beam(self, center, mfd):
+        """Directly build the fields for a gaussian beam with its waist at the mode's 
+        domain, travelling in the direction according to the constructor's 'backwards'
+        flag.
+
+        center:  (x,y) in mode coordinates of waist center
+        mfd:     beam waist diameter (intensity 1/e**2 of peak)
+        """
+        i0 = self.domain.i1   # [i,j,k] are in domain space
+        j0 = self.domain.j1
+        k0 = self.domain.k1
+        M = self._M
+        N = self._N
+        if NOT_PARALLEL:
+            if(self.verbose and NOT_PARALLEL):
+                info_message("*************** building gaussian beam ******************")
+
+            if(self.ndir == 'x'):     #                                                                      z,y (3D domain)
+                #                                                                                       ->   y,x (2D mode)
+                eps = self.eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, arr=None)[:,:,0]
+                mu  =  self.mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, arr=None)[:,:,0]
+                xmesh,ymesh = np.meshgrid(self.domain._y, self.domain._z)
+            elif(self.ndir == 'y'):
+                # TODO: FIXME
+                assert(False)
+            elif(self.ndir == 'z'):
+                # TODO: FIXME
+                assert(False)
+            eta = np.sqrt(mu/eps)
+            rsq = (xmesh-center[0])**2 + (ymesh-center[1])**2
+            Ex = np.exp(-rsq/(mfd/2)**2)
+            Ey = np.zeros_like(rsq, dtype=complex)
+            Ez = np.zeros_like(rsq, dtype=complex)
+            Hx = np.zeros_like(rsq, dtype=complex)
+            Hy = Ex / eta
+            Hz = np.zeros_like(rsq, dtype=complex)
+            local_x = np.concatenate((Ex,Ey,Ez,Hx,Hy,Hz)).ravel()
+            self._x[0].setValues(range(len(local_x)), local_x)
+
+        self._x[0].assemble()
+
+        
     def __permute_field_component(self, component):
         ## Permute the field components to account for planes with non-z normal
         # directions.

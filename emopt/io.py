@@ -297,7 +297,7 @@ def save_results(fname, data, additional=None):
         if 'M' in data:
             group_sim.attrs['M'] = data['M']
         if 'N' in data:
-            group_sim.attrs['N'] = data['M']
+            group_sim.attrs['N'] = data['N']
         if 'w_pml_x' in data:
             group_sim.attrs['w_pml_x'] = data['w_pml_x']
         if 'w_pml_y' in data:

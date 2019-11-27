@@ -36,7 +36,7 @@
 *.p
 
 # misc files
-*.h5
+#*.h5
 *.pdf
 .*.swp
 .DS_Store
