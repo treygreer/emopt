@@ -40,11 +40,13 @@ dy = 0.04
 dz = 0.04
 
 wavelength = 1.55
+guide_width = 0.5
+h_si = 0.22
 
 #####################################################################################
 # Setup simulation
 #####################################################################################
-sim = emopt.fdtd.FDTD(X,Y,Z,dx,dy,dz,wavelength, rtol=1e-5)
+sim = emopt.fdtd_cuda.FDTD(X,Y,Z,dx,dy,dz,wavelength, rtol=1e-5)
 w_pml = dx * 15
 sim.w_pml = [w_pml, w_pml, w_pml, w_pml, w_pml, w_pml]
 
@@ -59,17 +61,26 @@ Nz = sim.Nz
 #####################################################################################
 # Define the geometry/materials
 #####################################################################################
-r1 = emopt.grid.Rectangle(X/2, Y/2, 2*X, 0.5); r1.layer = 1
-r2 = emopt.grid.Rectangle(X/2, Y/2, 2*X, 2*Y); r2.layer = 2
+#r1 = emopt.grid_cuda.Rectangle(X/2, Y/2, 2*X, 0.5); r1.layer = 1
+#r2 = emopt.grid_cuda.Rectangle(X/2, Y/2, 2*X, 2*Y); r2.layer = 2
 
-r1.material_value = 3.45**2
-r2.material_value = 1.444**2
+#r1.material_value = 3.45**2
+#r2.material_value = 1.444**2
 
-eps = emopt.grid.StructuredMaterial3D(X, Y, Z, dx, dy, dz)
-eps.add_primitive(r2, -Z, Z)
-eps.add_primitive(r1, Z/2-0.11, Z/2+0.11)
+background_poly = emopt.grid_cuda.PolyMat([-X/2, 3*X/2, 3*X/2, -X/2],
+                                          [-Y/2, -Y/2,  3*Y/2, 3*Y/2],
+                                          material_value=1.444**2)
+guide_poly = emopt.grid_cuda.PolyMat(
+    [-X/2,              3*X/2,             3*X/2,             -X/2],
+    [Y/2-guide_width/2, Y/2-guide_width/2, Y/2+guide_width/2, Y/2+guide_width/2],
+    material_value=3.45**2)
 
-mu = emopt.grid.ConstantMaterial3D(1.0)
+eps = emopt.grid_cuda.StructuredMaterial3D([X, Y, Z],
+                                           [dx, dy, dz],
+                                           [[background_poly, -Z, 2*Z],
+                                            [guide_poly, Z/2-h_si/2, Z/2+h_si/2]])
+
+mu = emopt.grid_cuda.ConstantMaterial3D(1.0)
 
 sim.set_materials(eps, mu)
 sim.build()
