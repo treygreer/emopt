@@ -3,28 +3,22 @@
 #ifndef __GRID_CUDA_CTYPES_HPP__
 #define __GRID_CUDA_CTYPES_HPP__
 
-// This acts as an interface to the numpy.complex64 data type
-typedef struct struct_complex64 {
-	double real,
-		  imag;
-} complex64;
-
 extern "C" {
 
 	////////////////////////////////////////////////////////////////////////////////
 	// Polygon
 	////////////////////////////////////////////////////////////////////////////////
 	PolyMat* PolyMat_new(double *xs, double *ys, int n,
-						 double material_real, double material_imag);
+						 double material);
 	void PolyMat_delete(PolyMat* polymat);
 	//void Polygon_get_points(Polygon* poly, double** x, double** y, int* n);
 
     ////////////////////////////////////////////////////////////////////////////////
 	// Material3D
 	////////////////////////////////////////////////////////////////////////////////
-	void Material3D_get_value(Material3D* mat, complex64* val, double x, double y, double z);
+	void Material3D_get_value(Material3D* mat, double* val, double x, double y, double z);
 
-    void Material3D_get_values(Material3D* mat, complex64* arr, int k1, int k2,
+    void Material3D_get_values(Material3D* mat, double* arr, int k1, int k2,
                                                                 int j1, int j2, 
                                                                 int i1, int i2, 
                                                                 double koff, double joff, double ioff);
@@ -32,7 +26,7 @@ extern "C" {
 	////////////////////////////////////////////////////////////////////////////////
 	// ConstantMaterial3D
 	////////////////////////////////////////////////////////////////////////////////
-    ConstantMaterial3D* ConstantMaterial3D_new(double real, double imag);
+    ConstantMaterial3D* ConstantMaterial3D_new(double val);
 	void ConstantMaterial3D_delete(ConstantMaterial3D* cm);
 
 	////////////////////////////////////////////////////////////////////////////////

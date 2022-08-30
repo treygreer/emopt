@@ -131,8 +131,7 @@ namespace fdtd {
 			*Hx, *Hy, *Hz;
 
 		// Material arrays
-		complex128 *eps_x, *eps_y, *eps_z,
-			*mu_x, *mu_y, *mu_z;
+		double *eps_x, *eps_y, *eps_z;
 
 		// number of Yee cells in X, Y, Z
 		int Nx, Ny, Nz;

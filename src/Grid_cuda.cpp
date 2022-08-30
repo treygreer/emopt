@@ -10,7 +10,7 @@
 
 //------------------------------ PolyMat ------------------------------------/
 
-PolyMat::PolyMat(double* x, double* y, int n, std::complex<double> matval) :
+PolyMat::PolyMat(double* x, double* y, int n, double matval) :
 	_matval(matval)
 {
 	_bpolys.resize(1);
@@ -22,7 +22,7 @@ PolyMat::PolyMat(double* x, double* y, int n, std::complex<double> matval) :
     bg::correct(_bpolys);
 }
 
-PolyMat::PolyMat(BoostMultiPolygon bpolys, std::complex<double> matval) :
+PolyMat::PolyMat(BoostMultiPolygon bpolys, double matval) :
 	_matval(matval), _bpolys(bpolys)
 {
 }
@@ -64,7 +64,7 @@ StructuredMaterialLayer::StructuredMaterialLayer(double X, double Y, double dx, 
 	double background_xs[5] = {-dx, X+dx, X+dx, -dx};
 	double background_ys[5] = {-dy, -dy,  Y+dy, Y+dy};
 
-	std::complex<double> background_material(1.0, 0.0);
+	double background_material(1.0);
 	PolyMat *background_polymat = new PolyMat(background_xs, background_ys, 4, background_material);
 
 	// make material bounding box (useful for area assertions)
@@ -124,8 +124,10 @@ void StructuredMaterialLayer::verify_area()
 		total_area += poly_area;
 	}
 	double envelope_area = bg::area(_envelope);
-	if (_polys_valid && (fabs(total_area - envelope_area) / envelope_area) > 1e-12) {
-		std::cerr << "ERROR: total_area " << total_area << " != envelope_area " << envelope_area << "\n";
+	double relative_error = (fabs(total_area - envelope_area) / envelope_area);
+	if (_polys_valid && relative_error > 1e-6) {
+		std::cerr << "ERROR in Grid_cuda: total_area " << total_area << " != envelope_area " << envelope_area << "\n"; 
+		std::cerr << "    relative error = " << relative_error << "\n";
 		exit(-1);
 	}
 }
@@ -141,12 +143,12 @@ void StructuredMaterialLayer::add_polymats(std::list<PolyMat*> polymats)
 ////////////////////////////////////////////////////////////////////////////////////
 // ConstantMaterial3D
 ////////////////////////////////////////////////////////////////////////////////////
-ConstantMaterial3D::ConstantMaterial3D(std::complex<double> value)
+ConstantMaterial3D::ConstantMaterial3D(double value)
 {
     _value = value;
 }
 
-void ConstantMaterial3D::get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2,
+void ConstantMaterial3D::get_values(double* grid, int k1, int k2, int j1, int j2,
                                     int i1, int i2,
 									double koff, double joff, double ioff)
 {
@@ -251,7 +253,7 @@ void StructuredMaterial3D::add_polymat(PolyMat* polymat, double z1, double z2)
 
 
 // Note that this takes a 1D array!
-void StructuredMaterial3D::get_values(std::complex<double>* grid,
+void StructuredMaterial3D::get_values(double* grid,
 									  int k1, int k2, 
 									  int j1, int j2, 
 									  int i1, int i2, 

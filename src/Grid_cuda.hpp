@@ -7,7 +7,6 @@
 #pragma GCC diagnostic pop
 
 #include <cmath>
-#include <complex>
 #include <string>
 #include <vector>
 #include <list>
@@ -40,7 +39,7 @@ typedef bg::model::segment<BoostPoint> BoostSegment;
  */
 class PolyMat {
 private:
-	std::complex<double> _matval;
+	double _matval;
 	BoostMultiPolygon _bpolys;
         
 public:
@@ -50,13 +49,13 @@ public:
 	 * @n number of elements in x and y
 	 * @mat the complex material value
 	 */
-	PolyMat(double* x, double* y, int n, std::complex<double> matval);
+	PolyMat(double* x, double* y, int n, double matval);
 
 	/* Constructor
 	 * @verts boost vertices
 	 * @mat the complex material value
 	 */
-	PolyMat(BoostMultiPolygon bpolys, std::complex<double> matval);
+	PolyMat(BoostMultiPolygon bpolys, double matval);
 
 	/* Copy Constructor
 	 */
@@ -73,7 +72,7 @@ public:
 	 *
 	 * @return the complex material value of the PolyMat.
 	 */
-	inline std::complex<double> get_matval() { return _matval; };
+	inline double get_matval() { return _matval; };
 
 	void clip(BoostBox box);
 	void subtract(BoostMultiPolygon bpolys);
@@ -137,7 +136,7 @@ public:
 	 * @return the complex material value at (x,y).  If no MaterialPrimitive exists at (x,y),
 	 *  _background is returned.
 	 */
-	void get_values(std::complex<double>* grid, int k1, int k2, int j1, int j2,
+	void get_values(double* grid, int k1, int k2, int j1, int j2,
 					double koff, double joff);
 
 	/* Get the list of primitives belonging to this StructuredMaterial
@@ -175,7 +174,7 @@ public:
 
 	/* Get a block of values.
 	 */
-	virtual void get_values(std::complex<double>* grid,
+	virtual void get_values(double* grid,
 							int k1, int k2, int j1, int j2, int i1, int i2,
 							double koff, double joff, double ioff) = 0;
 	virtual ~Material3D() {};
@@ -187,16 +186,16 @@ public:
  */
 class ConstantMaterial3D : public Material3D {
 private:
-	std::complex<double> _value;
+	double _value;
 	
 public:
-	ConstantMaterial3D(std::complex<double> value);
+	ConstantMaterial3D(double value);
 
 	/* Get a block of values.
 	 *
 	 * This just fills the provided array with a single value
 	 */
-	void get_values(std::complex<double>* grid,
+	void get_values(double* grid,
 					int k1, int k2, int j1, int j2, int i1, int i2,
 					double koff, double joff, double ioff);
 
@@ -261,7 +260,7 @@ public:
 	/* Get the complex material value at the indexed positions.
 	 * @return the complex material values at (k,j,i).  If no MaterialPrimitive exists at (x,y), _background is returned.
 	 */
-	void get_values(std::complex<double>* grid,
+	void get_values(double* grid,
 					int k1, int k2, 
 					int j1, int j2, 
 					int i1, int i2, 

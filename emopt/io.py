@@ -249,7 +249,6 @@ def save_results(fname, data, additional=None):
     Hy - y component of magnetic field
     Hz - z component of magnetic field
     eps - The permittivity of the system
-    mu - The permeability of the system
     params - The design parameters of the system
     foms - List of figure of merits achieved during optimization
 
@@ -318,8 +317,6 @@ def save_results(fname, data, additional=None):
             group_sim.create_dataset('Hz', data=data['Hz'])
         if 'eps' in data:
             group_sim.create_dataset('eps', data=data['eps'])
-        if 'mu' in data:
-            group_sim.create_dataset('mu', data=data['mu'])
 
         # Optimization results
         if 'params' in data:

@@ -50,13 +50,12 @@ import shapely
 import shapely.ops
 import matplotlib.pyplot as plt
 import sys
-from emopt.misc import NOT_PARALLEL, run_on_master, RANK
 from petsc4py import PETSc
-rank = PETSc.COMM_WORLD.getRank()
 
 interactive = False
 output_gds = True
 y_symmetry = True
+calc_modes = False  # calculate and write out modes.  Otherwise read modes.
 
 if output_gds:
     import gdspy
@@ -115,7 +114,7 @@ def intersection_cost(spline1, spline2, min_width=0.2):
     points1 = spline1(t)
     points2 = spline2(t)
     dist_matrix = scipy.spatial.distance.cdist(points1, points2, 'euclidean')
-    print(f'rank={rank} minimum distance = {np.min(dist_matrix)}')
+    print(f'minimum distance = {np.min(dist_matrix)}')
     inv_dist_matrix = 1.0 / dist_matrix;
     inv_dist_bode = bode_knee(1.0/dist_matrix, 1.0/min_width)
     cost = np.sum(inv_dist_bode) / (N*N)
@@ -204,6 +203,7 @@ class Params(object):
             plt.xlim(-2*dx,X+2*dx)
             plt.ylim(-2*dy,Y+2*dy)
             plt.plot((0,0,X,X,0),(0,Y,Y,0,0), lw=0.5, color='grey')
+            input("Press [enter] to continue.")
 
         knots = spline_even_knots(len(ctl_points2), spline_order)
         self.spline2 = interpolate.BSpline(knots, ctl_points2, spline_order)
@@ -252,9 +252,10 @@ class Params(object):
             plt.ion()
             plt.show()
             plt.pause(.001)
+            input("Press [enter] to continue.")
 
     def make_eps(self):
-        print(f"rank={rank} *********make_eps***********...");
+        print(f"*********make_eps***********...");
         sys.stdout.flush()  # for MPI
         # Geometry consists of input waveguide, output waveguide, and MMI splitting
         # section. Structure is silicon clad in SiO2
@@ -275,17 +276,10 @@ class Params(object):
                                                    [dx, dy, dz],
                                                    [[background_poly, -Z, 2*Z],
                                                     [mmi_poly, Z/2-h_si/2, Z/2+h_si/2]])
-        print(f"rank={rank} *********make_eps***********...done");
+        print(f"*********make_eps***********...done");
         sys.stdout.flush()  # for MPI
         return eps
 
-    def make_mu(self):
-        print(f"rank={rank} *********make_mu***********...");
-        sys.stdout.flush()  # for MPI
-        mu = emopt.grid_cuda.ConstantMaterial3D(1.0)
-        print(f"rank={rank} *********make_mu***********...done");
-        sys.stdout.flush()  # for MPI
-        return mu
 
 class MMISplitterAdjointMethod(AdjointMethodPNF3D):
     """Define a figure of merit and its derivative for adjoint sensitivity
@@ -301,13 +295,11 @@ class MMISplitterAdjointMethod(AdjointMethodPNF3D):
         
 
 
-    @run_on_master
     def __init__(self, sim, fom_domain, mode_match):
         super(MMISplitterAdjointMethod, self).__init__(sim, step=1e-2)
         self.mode_match = mode_match
         self.fom_domain = fom_domain
 
-    @run_on_master
     def update_system(self, param_vector):
         """Update the geometry of the system based on the current design
         parameters.
@@ -318,13 +310,11 @@ class MMISplitterAdjointMethod(AdjointMethodPNF3D):
 
         We use these values to modify the structure dimensions
         """
-        print(f"rank={rank} update system: params=", param_vector)
+        print(f"update system: params=", param_vector)
         params = Params(param_vector)
         eps = params.make_eps()
-        mu = params.make_mu() 
-        self.sim.set_materials(eps, mu)
+        self.sim.set_materials(eps)
 
-    @run_on_master
     def calc_f(self, sim, param_vector):
         """Calculate the figure of merit.
 
@@ -338,7 +328,6 @@ class MMISplitterAdjointMethod(AdjointMethodPNF3D):
 
         return fom
 
-    @run_on_master
     def calc_dfdx(self, sim, params):
         """Calculate the figure of merit with respect to E and H.
 
@@ -363,14 +352,12 @@ class MMISplitterAdjointMethod(AdjointMethodPNF3D):
 
         return [(dfdEx, dfdEy, dfdEz, dfdHx, dfdHy, dfdHz)]
 
-    @run_on_master
     def get_fom_domains(self):
         """We must return the DomainCoordinates object that corresponds to our
         figure of merit. In theory, we could have many of these.
         """
         return [self.fom_domain]
 
-    @run_on_master
     def calc_penalty(self, sim, param_vector):
         """Calculate a penalty to the figure of merit due to curvature
         """
@@ -378,21 +365,19 @@ class MMISplitterAdjointMethod(AdjointMethodPNF3D):
         crv_cost = self.curvature_penalty*(curvature_cost(params.spline1) +
                                            curvature_cost(params.spline2))
         
-        print(f'   rank={rank} calc_penalty: crv_cost = {crv_cost}')
+        print(f'calc_penalty: crv_cost = {crv_cost}')
         return crv_cost
 
-    @run_on_master
     def calc_grad_p(self, sim, params):
         """Calculate the derivative of the penalty term in the FOM with respect
         to design variables of the system.
         """
-        print(f"rank={rank} calc_grad_p  params={params} ...")
+        print(f"calc_grad_p  params={params} ...")
         func = lambda ps: self.calc_penalty(sim, ps)
         gradient = scipy.optimize.approx_fprime(params, func, epsilon=0.001)
-        print(f"rank={rank} ...calc_grad_p: gradient={gradient}")
+        print(f"...calc_grad_p: gradient={gradient}")
         return gradient
 
-@run_on_master
 def plot_update(params, fom_list, sim, am):
     """Save a snapshot of the current state of the structure.
 
@@ -400,12 +385,12 @@ def plot_update(params, fom_list, sim, am):
     iteration of the optimization. It plots the current refractive index
     distribution, the electric field, and the full figure of merit history.
     """
-    print(f'rank={rank} Finished iteration {len(fom_list)+1}')
+    print(f' Finished iteration {len(fom_list)+1}')
     current_fom = -1*am.calc_fom(sim, params)
     fom_list.append(current_fom)
     eps_arr = sim.eps.get_values_in(sim.field_domains[1])
     Ex, Ey, Ez, Hx, Hy, Hz = sim.saved_fields[1]
-    print(f"rank={rank} params={params}, fom_list={fom_list}")
+    print(f"params={params}, fom_list={fom_list}")
 
     foms = {'Insertion Loss' : fom_list}
     emopt.io.plot_iteration(Ey.squeeze().real, eps_arr.squeeze().real, 
@@ -468,119 +453,135 @@ else:
     sim.w_pml = [w_pml, w_pml, w_pml, w_pml, w_pml, w_pml]
     sim.bc = 'EEE'
 
-#####################################################################################
-# Setup the sources
-#####################################################################################
-# We excite the system by injecting the fundamental mode of the input waveguide
 input_slice = emopt.misc.DomainCoordinates(port_offset, port_offset,             # x
                                            0 if y_symmetry else w_pml, Y-w_pml,  # y
                                            w_pml, Z-w_pml,                       # z
                                            dx, dy, dz)
 
-params = Params(Params.init)
-eps = params.make_eps()
-mu = params.make_mu()
-mode = emopt.modes.ModeFullVector(wavelength, eps, mu, input_slice, n0=3.45,
-                                  neigs=4)
-
-# The mode boundary conditions should match the simulation boundary conditins.
-# Mode is in the y-z plane, so the boundary conditions are H0
-mode.bc = 'HE' if y_symmetry else 'EE'
-mode.build()
-mode.solve()
-sources = mode.get_source(i=0, dx=dx, dy=dy, dz=dz)
-if NOT_PARALLEL:
-    print(f'local: sources[0].shape={sources[0].shape}')
-    sim.set_sources(sources, input_slice)
-    if interactive:
-        plt.figure(2)
-        plt.clf()
-        plt.imshow(np.abs(np.abs(mode.get_field_interp(0, 'Ex')).squeeze()))
-        plt.colorbar()
-        input("Press [enter] to continue.")
-
-#####################################################################################
-# Mode match for optimization
-#####################################################################################
-# we need to calculate the field used as the reference field in our mode match
-# figure of merit calculation. This is the fundamental super mode of the output
-# waveguides.
 fom_slice = emopt.misc.DomainCoordinates(X-port_offset, X-port_offset,        # x 
                                          0 if y_symmetry else w_pml, Y-w_pml, # y
                                          w_pml, Z-w_pml,                      # z
                                          dx, dy, dz)
 
-fom_mode = emopt.modes.ModeFullVector(wavelength, eps, mu, fom_slice, n0=3.45,
-                                      neigs=4)
-
-# Need to be consistent with boundary conditions!
-fom_mode.bc = 'HE' if y_symmetry else 'EE'
-fom_mode.build()
-fom_mode.solve()
-fom_mode_fields = {
-    'Exm': fom_mode.get_field_interp(0, 'Ex'),
-    'Eym': fom_mode.get_field_interp(0, 'Ey'),
-    'Ezm': fom_mode.get_field_interp(0, 'Ez'),
-    'Hxm': fom_mode.get_field_interp(0, 'Hx'),
-    'Hym': fom_mode.get_field_interp(0, 'Hy'),
-    'Hzm': fom_mode.get_field_interp(0, 'Hz')
-    }
-print(f'local: fom_mode_fields["Hzm"].shape={fom_mode_fields["Hzm"].shape}')
-
-#with shelve.open('data/modes.shelve', 'r') as shelf:
-#    fom_mode_fields = shelf[f'fom_mode_fields_{dxyz}']
-#    print(f'shelved: fom_mode_fields["Hzm"].shape={fom_mode_fields["Hzm"].shape}')
-mode_match = emopt.fomutils.ModeMatch(normal=[1,0,0], ds1=dy, ds2=dz, **fom_mode_fields)
-
-if NOT_PARALLEL:
+if calc_modes:    
     #####################################################################################
-    # define additional domains for field reporting (field domain 0 is for fom calculation)
+    # Setup the sources
     #####################################################################################
-    # horizontal slice through middle of waveguides
-    field_monitor_slice1 = emopt.misc.DomainCoordinates(0, X, 0, Y, Z/2, Z/2,
-                                                        dx, dy, dz)
-    # vertical slice through symmetry plane
-    field_monitor_slice2 = emopt.misc.DomainCoordinates(0, X, 0, 0, 0, Z,
-                                                        dx, dy, dz)
-    field_monitor_slice3 = emopt.misc.DomainCoordinates(0, X, w_wg, w_wg, 0, Z,
-                                                        dx, dy, dz)
-    # vertical slice through output waveguide
-    sim.field_domains = [fom_slice, field_monitor_slice1,
-                         field_monitor_slice2,
-                         field_monitor_slice3]
+    # We excite the system by injecting the fundamental mode of the input waveguide
+    params = Params(Params.init)
+    eps = params.make_eps()
+    input_mode = emopt.modes.ModeFullVector(wavelength, eps, input_slice, n0=3.45,
+                                            neigs=4)
 
-    #####################################################################################
-    # Setup the AdjointMethod object needed for gradient calculations
-    #####################################################################################
-    am = MMISplitterAdjointMethod(sim, fom_slice, mode_match)
-    am.curvature_penalty =  1.0
-    am.intersection_penalty =  1.0
-    
-    #####################################################################################
-    # Setup and run the optimization
-    #####################################################################################
-    # L-BFGS-B will print out the iteration number and FOM value
-    fom_list = []
-    callback = lambda x : plot_update(x, fom_list, sim, am)
-    max_iters = 10
-    #initial_params = Params.init
-    initial_params = [1.59640526, 1.71730974, 0.39033418, 1.89133451, 0.92390186, 4.01017023,
-                      0.89927224, 4.27082338, 0.82687517, 4.39763377, 4.45615605, 4.29127133,
-                      0.13311415, 4.11475779, 0.10247903]
-    opt = emopt.optimizer.Optimizer(am, initial_params, Nmax=max_iters, opt_method='L-BFGS-B',
-                                    callback_func=callback, bounds=Params.bounds)
-    print("**************calling optimizer")
-    sys.stdout.flush()  # for MPI
-    #fom = am.fom(Params.init)
-    final_fom, final_params = opt.run()
-
-
-    # for valgrind
-    #del sim, eps, mu, mode, mode_match, fom_mode, opt
-    #gc.collect()
-
-
+    # The mode boundary conditions should match the simulation boundary conditins.
+    # Mode is in the y-z plane, so the boundary conditions are H0
+    input_mode.bc = 'HE' if y_symmetry else 'EE'
+    input_mode.build()
+    input_mode.solve()
     if interactive:
+        plt.figure(2)
+        plt.clf()
+        plt.imshow(np.abs(np.abs(input_mode.get_field_interp(0, 'Ex')).squeeze()))
+        plt.colorbar()
         input("Press [enter] to continue.")
 
-print(f"******* rank={RANK} ********* script done *********************")
+    sources = input_mode.get_source(i=0, dx=dx, dy=dy, dz=dz)
+    with shelve.open('data/modes.shelve') as shelf:
+        shelf['sources'] = sources
+
+    #####################################################################################
+    # Mode match for optimization
+    #####################################################################################
+    # we need to calculate the field used as the reference field in our mode match
+    # figure of merit calculation. This is the fundamental super mode of the output
+    # waveguides.
+    fom_mode = emopt.modes.ModeFullVector(wavelength, eps, fom_slice, n0=3.45,
+                                          neigs=4)
+
+    # Need to be consistent with boundary conditions!
+    fom_mode.bc = 'HE' if y_symmetry else 'EE'
+    fom_mode.build()
+    fom_mode.solve()
+    fom_mode_fields = {
+        'Exm': fom_mode.get_field_interp(0, 'Ex'),
+        'Eym': fom_mode.get_field_interp(0, 'Ey'),
+        'Ezm': fom_mode.get_field_interp(0, 'Ez'),
+        'Hxm': fom_mode.get_field_interp(0, 'Hx'),
+        'Hym': fom_mode.get_field_interp(0, 'Hy'),
+        'Hzm': fom_mode.get_field_interp(0, 'Hz')
+    }
+
+    # write out input_mode and fom_mode
+    with shelve.open('data/modes.shelve') as shelf:
+        shelf['fom_mode_fields'] = fom_mode_fields
+
+    print("Sources and fom_mode_fields written. Exiting.")
+    exit(0)
+
+# Read input_mode and fom_mode    
+with shelve.open('data/modes.shelve') as shelf:
+    sources = shelf['sources']
+    fom_mode_fields = shelf['fom_mode_fields']
+
+print(f'local: sources[0].shape={sources[0].shape}')
+sim.set_sources(sources, input_slice)
+
+print(f'local: fom_mode_fields["Hzm"].shape={fom_mode_fields["Hzm"].shape}')
+mode_match = emopt.fomutils.ModeMatch(normal=[1,0,0], ds1=dy, ds2=dz, **fom_mode_fields)
+
+#####################################################################################
+# define additional domains for field reporting (field domain 0 is for fom calculation)
+#####################################################################################
+# horizontal slice through middle of waveguides
+field_monitor_slice1 = emopt.misc.DomainCoordinates(0, X, 0, Y, Z/2, Z/2,
+                                                    dx, dy, dz)
+# vertical slice through symmetry plane
+field_monitor_slice2 = emopt.misc.DomainCoordinates(0, X, 0, 0, 0, Z,
+                                                    dx, dy, dz)
+field_monitor_slice3 = emopt.misc.DomainCoordinates(0, X, w_wg, w_wg, 0, Z,
+                                                    dx, dy, dz)
+# vertical slice through output waveguide
+sim.field_domains = [fom_slice, field_monitor_slice1,
+                     field_monitor_slice2,
+                     field_monitor_slice3]
+
+#####################################################################################
+# Setup the AdjointMethod object needed for gradient calculations
+#####################################################################################
+am = MMISplitterAdjointMethod(sim, fom_slice, mode_match)
+am.curvature_penalty =  1.0
+am.intersection_penalty =  1.0
+
+#####################################################################################
+# Setup and run the optimization
+#####################################################################################
+# L-BFGS-B will print out the iteration number and FOM value
+fom_list = []
+callback = lambda x : plot_update(x, fom_list, sim, am)
+max_iters = 10
+#initial_params = Params.init
+#initial_params = [1.59640526, 1.71730974, 0.39033418, 1.89133451, 0.92390186, 4.01017023,
+#                  0.89927224, 4.27082338, 0.82687517, 4.39763377, 4.45615605, 4.29127133,
+#                  0.13311415, 4.11475779, 0.10247903]
+
+initial_params=[1.61448188, 1.65632277, 0.36123383, 1.83488247, 0.92067267, 4.01992044,
+                0.90369378, 4.27444168, 0.79784968, 4.37432747, 4.49201512, 4.32561257,
+                0.13401802, 4.14075988, 0.1235    ]
+
+opt = emopt.optimizer.Optimizer(am, initial_params, Nmax=max_iters, opt_method='L-BFGS-B',
+                                callback_func=callback, bounds=Params.bounds)
+print("**************calling optimizer")
+sys.stdout.flush()  # for MPI
+#fom = am.fom(Params.init)
+final_fom, final_params = opt.run()
+
+
+# for valgrind
+#del sim, eps, mu, mode, mode_match, fom_mode, opt
+#gc.collect()
+
+
+if interactive:
+    input("Press [enter] to continue.")
+
+print(f"**************** script done *********************")

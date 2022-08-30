@@ -34,15 +34,17 @@
 # Python ignores
 *.pyc
 *.p
+*.ipynb_checkpoints
 
 # misc files
-#*.h5
+*.h5
 *.pdf
 .*.swp
 .DS_Store
 ._.DS_Store
 ._*
 *.log
+*.gds
 
 # Python dist files
 build/
@@ -52,3 +54,6 @@ emopt.egg-info/
 dist/
 docs/build/doctrees
 docs/build/html
+
+# emacs backup files
+*~

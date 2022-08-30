@@ -248,9 +248,8 @@ class AdjointMethod(with_metaclass(ABCMeta, object)):
     @step.setter
     def step(self, val):
         if(np.abs(val) > self.sim.dx/1e3):
-            if(NOT_PARALLEL):
-                warning_message('Step size used for adjoint method may be too '
-                                'large.  Consider reducing it to ~1e-3*dx')
+            warning_message('Step size used for adjoint method may be too '
+                            'large.  Consider reducing it to ~1e-3*dx')
         self._step = val
 
     @abstractmethod
@@ -581,53 +580,48 @@ class AdjointMethod(with_metaclass(ABCMeta, object)):
             p0 = params[j]
             params[j] += fd_step
             fom1 = self.fom(params)
-            if(NOT_PARALLEL):
-                grad_fd[i] = (fom1-fom0)/fd_step
+            grad_fd[i] = (fom1-fom0)/fd_step
             params[j] = p0
 
 
-        if(NOT_PARALLEL):
-            errors = np.abs(grad_fd - grad_am[indices]) / np.abs(grad_fd)
-            error_tot = np.linalg.norm(grad_fd - grad_am[indices]) / np.linalg.norm(grad_fd)
 
-            if(error_tot < 0.01 and verbose):
-                info_message('The total error in the gradient is %0.4E' % \
-                             (error_tot))
-            else:
-                warning_message('The total error in the gradient is %0.4E '
-                                'which is over 1%%' % (error_tot), \
-                                'emopt.adjoint_method')
+        errors = np.abs(grad_fd - grad_am[indices]) / np.abs(grad_fd)
+        error_tot = np.linalg.norm(grad_fd - grad_am[indices]) / np.linalg.norm(grad_fd)
 
-            if(plot):
-                import matplotlib.pyplot as plt
-                f = plt.figure()
-                ax1 = f.add_subplot(311)
-                ax2 = f.add_subplot(312)
-                ax3 = f.add_subplot(313)
-
-                xs = np.arange(len(indices))
-                ax1.bar(xs, grad_fd)
-                ax1.set_title('Finite Differences')
-                ax2.bar(xs, grad_am[indices])
-                ax2.set_title('Adjoint Method')
-                ax3.bar(xs, errors)
-                ax3.set_title('Error in Adjoint Method')
-
-                for ax in [ax1, ax2, ax3]:
-                    ax.set_xticklabels(['%d' % i for i in indices])
-
-                ax3.set_yscale('log', nonposy='clip')
-
-                plt.show()
-
-            if(return_gradients):
-                return error_tot, grad_fd, grad_am
-            else:
-                return error_tot
+        if(error_tot < 0.01 and verbose):
+            info_message('The total error in the gradient is %0.4E' % \
+                         (error_tot))
         else:
-            if(return_gradients):
-                return None, None, None
-            return None
+            warning_message('The total error in the gradient is %0.4E '
+                            'which is over 1%%' % (error_tot), \
+                            'emopt.adjoint_method')
+
+        if(plot):
+            import matplotlib.pyplot as plt
+            f = plt.figure()
+            ax1 = f.add_subplot(311)
+            ax2 = f.add_subplot(312)
+            ax3 = f.add_subplot(313)
+
+            xs = np.arange(len(indices))
+            ax1.bar(xs, grad_fd)
+            ax1.set_title('Finite Differences')
+            ax2.bar(xs, grad_am[indices])
+            ax2.set_title('Adjoint Method')
+            ax3.bar(xs, errors)
+            ax3.set_title('Error in Adjoint Method')
+
+            for ax in [ax1, ax2, ax3]:
+                ax.set_xticklabels(['%d' % i for i in indices])
+
+            ax3.set_yscale('log', nonpositive='clip')
+
+            plt.show()
+
+        if(return_gradients):
+            return error_tot, grad_fd, grad_am
+        else:
+            return error_tot
 
 class AdjointMethodMO(with_metaclass(ABCMeta, AdjointMethod)):
     """An AdjointMethod object for an ensemble of different figures of merit

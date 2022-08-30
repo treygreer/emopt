@@ -181,8 +181,6 @@ class FDTD(MaxwellSolver):
         The wavelength of the source (and fields)
     eps : emopt.grid.Material3D
         The permittivity distribution.
-    mu : emopt.grid.Material3D
-        The permeability distribution.
     rtol : float (optional)
         The relative tolerance used to terminate the simulation.
         (default = 1e-6)
@@ -309,15 +307,9 @@ class FDTD(MaxwellSolver):
         self._eps_x = np.ctypeslib.as_array(self._libfdtd.contents.eps_x, shape=(Nz*Ny*Nx,))
         self._eps_y = np.ctypeslib.as_array(self._libfdtd.contents.eps_y, shape=(Nz*Ny*Nx,))
         self._eps_z = np.ctypeslib.as_array(self._libfdtd.contents.eps_z, shape=(Nz*Ny*Nx,))
-        self._mu_x = np.ctypeslib.as_array(self._libfdtd.contents.mu_x, shape=(Nz*Ny*Nx,))
-        self._mu_y = np.ctypeslib.as_array(self._libfdtd.contents.mu_y, shape=(Nz*Ny*Nx,))
-        self._mu_z = np.ctypeslib.as_array(self._libfdtd.contents.mu_z, shape=(Nz*Ny*Nx,))
-        self._eps_x.dtype = np.complex128
-        self._eps_y.dtype = np.complex128
-        self._eps_z.dtype = np.complex128
-        self._mu_x.dtype = np.complex128
-        self._mu_y.dtype = np.complex128
-        self._mu_z.dtype = np.complex128
+        self._eps_x.dtype = np.float64
+        self._eps_y.dtype = np.float64
+        self._eps_z.dtype = np.float64
 
         libFDTD.FDTD_set_wavelength(self._libfdtd, wavelength)
         libFDTD.FDTD_set_physical_dims(self._libfdtd, X, Y, Z, dx, dy, dz)
@@ -378,9 +370,8 @@ class FDTD(MaxwellSolver):
         self._bc = ['0', '0', '0']
         libFDTD.FDTD_set_bc(self._libfdtd, ''.join(self._bc).encode('ascii'))
 
-        # make room for eps and mu
+        # make room for eps
         self._eps = None
-        self._mu = None
 
     @property
     def wavelength(self):
@@ -439,10 +430,6 @@ class FDTD(MaxwellSolver):
     @property
     def eps(self):
         return self._eps
-
-    @property
-    def mu(self):
-        return self._mu
 
     @property
     def courant_num(self):
@@ -597,11 +584,10 @@ class FDTD(MaxwellSolver):
     def Z_real(self):
         return self._Z-self._w_pml[4]-self._w_pml[5]
 
-    def set_materials(self, eps, mu):
+    def set_materials(self, eps):
         if(self.verbose > 10):
             info_message('fdtd_cuda:  set_materials() called')
         self._eps = eps
-        self._mu = mu
 
     def __get_local_domain_overlap(self, domain):
         ## Get the local and global ijk bounds which correspond to the overlap
@@ -770,7 +756,6 @@ class FDTD(MaxwellSolver):
             info_message('Building FDTD system...')
 
         eps = self._eps
-        mu = self._mu
 
         eps.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
                        koff=0.5, joff=0.0, ioff=-0.5,
@@ -784,17 +769,6 @@ class FDTD(MaxwellSolver):
                        koff=0.0, joff=0.0, ioff=0.0,
                        arr=self._eps_z)
 
-        mu.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
-                      koff=0.0, joff=0.5, ioff=0.0,
-                      arr=self._mu_x)
-
-        mu.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
-                       koff=0.5, joff=0.0, ioff=0.0,
-                       arr=self._mu_y)
-
-        mu.get_values(0, self._Nx, 0, self._Ny, 0, self._Nz,
-                       koff=0.5, joff=0.5, ioff=-0.5,
-                       arr=self._mu_z)
         if(self.verbose > 10):
             info_message('Building FDTD system...done')
 
@@ -818,6 +792,7 @@ class FDTD(MaxwellSolver):
         ody = R/self._dy
         odz = R/self._dz
         Nx, Ny, Nz = self._Nx, self._Ny, self._Nz
+        print(f"Nx={Nx}, Ny={Ny}, Nz={Nz}")
 
         # define time step
         dt = self._dt
@@ -1448,11 +1423,8 @@ class FDTD(MaxwellSolver):
         eps_x = np.copy(self._eps_x)
         eps_y = np.copy(self._eps_y)
         eps_z = np.copy(self._eps_z)
-        mu_x = np.copy(self._mu_x)
-        mu_y = np.copy(self._mu_y)
-        mu_z = np.copy(self._mu_z)
 
-        return (eps_x, eps_y, eps_z, mu_x, mu_y, mu_z)
+        return (eps_x, eps_y, eps_z)
 
     @run_on_master
     def calc_ydAx(self, Adiag0):
@@ -1468,15 +1440,12 @@ class FDTD(MaxwellSolver):
         complex
             The product y^T*dA*x
         """
-        eps_x0, eps_y0, eps_z0, mu_x0, mu_y0, mu_z0 = Adiag0
+        eps_x0, eps_y0, eps_z0  = Adiag0
 
         ydAx = np.zeros(eps_x0.shape, dtype=np.complex128)
         ydAx = ydAx + self._Ex_adj_t0[...] *  1j * (self._eps_x[...]-eps_x0) * self._Ex_fwd_t0[...]
         ydAx = ydAx + self._Ey_adj_t0[...] *  1j * (self._eps_y[...]-eps_y0) * self._Ey_fwd_t0[...]
         ydAx = ydAx + self._Ez_adj_t0[...] *  1j * (self._eps_z[...]-eps_z0) * self._Ez_fwd_t0[...]
-        ydAx = ydAx + self._Hx_adj_t0[...] * -1j * (self._mu_x[...]-mu_x0)   * self._Hx_fwd_t0[...]
-        ydAx = ydAx + self._Hy_adj_t0[...] * -1j * (self._mu_y[...]-mu_y0)   * self._Hy_fwd_t0[...]
-        ydAx = ydAx + self._Hz_adj_t0[...] * -1j * (self._mu_z[...]-mu_z0)   * self._Hz_fwd_t0[...]
 
         return np.sum(ydAx)
 

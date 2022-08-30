@@ -1418,10 +1418,8 @@ def power_norm_dFdx_TE(sim, f, dfdEz, dfdHx, dfdHy):
 
     if(not sim.real_materials):
         eps = sim.eps.get_values(0,N,0,M)
-        mu = sim.mu.get_values(0,N,0,M)
     else:
-        eps = np.zeros(Ezc.shape, dtype=np.complex128)
-        mu = np.zeros(Ezc.shape, dtype=np.complex128)
+        eps = np.zeros(Ezc.shape, dtype=np.float64)
 
     # get the planes through which power leaves the system
     w_pml_l = sim._w_pml_left
@@ -1455,11 +1453,9 @@ def power_norm_dFdx_TE(sim, f, dfdEz, dfdHx, dfdHy):
 
     dPdHx[y_top, x_top] += 0.25*dx*Ezc[y_top, x_top]
     dPdHx[y_bot, x_bot] += -0.25*dx*Ezc[y_bot, x_bot]
-    dPdHx[y_all, x_all] += 0.25*dx*dy*mu[y_all,x_all].imag*Hxc[y_all, x_all]
 
     dPdHy[y_left, x_left]   += 0.25*dy*Ezc[y_left, x_left]
     dPdHy[y_right, x_right] += -0.25*dy*Ezc[y_right, x_right]
-    dPdHy[y_all, x_all] += 0.25*dx*dy*mu[y_all,x_all].imag*Hyc[y_all, x_all]
 
     dFdEz = (Psrc * dfdEz - f * dPdEz) / Psrc**2
     dFdHx = (Psrc * dfdHx - f * dPdHx) / Psrc**2
@@ -1529,10 +1525,8 @@ def power_norm_dFdx_TM(sim, f, dfdHz, dfdEx, dfdEy):
 
     if(not sim.real_materials):
         eps = sim.eps.get_values(0,N,0,M)
-        mu = sim.mu.get_values(0,N,0,M)
     else:
         eps = np.zeros(Hzc.shape, dtype=np.complex128)
-        mu = np.zeros(Hzc.shape, dtype=np.complex128)
 
     # get the planes through which power leaves the system
     w_pml_l = sim._w_pml_left
@@ -1562,7 +1556,6 @@ def power_norm_dFdx_TM(sim, f, dfdHz, dfdEx, dfdEy):
     dPdHz[y_top, x_top]     += -0.25*dx*Exc[y_top, x_top]
     dPdHz[y_right, x_right] += 0.25*dy*Eyc[y_right, x_right]
     dPdHz[y_bot, x_bot]     += 0.25*dx*Exc[y_bot, x_bot]
-    dPdHz[y_all, x_all]     += 0.25*dx*dy*mu[y_all,x_all].imag*Hzc[y_all, x_all]
 
     dPdEx[y_top, x_top] += -0.25*dx*Hzc[y_top, x_top]
     dPdEx[y_bot, x_bot] += +0.25*dx*Hzc[y_bot, x_bot]

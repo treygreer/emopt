@@ -5,11 +5,9 @@
 // Polygon Primitives
 /////////////////////////////////////////////////////////////////////////////////////
 
-PolyMat* PolyMat_new(double *xs, double *ys, int n,
-					 double material_real, double material_imag)
+PolyMat* PolyMat_new(double *xs, double *ys, int n,	double material)
 {
-	return new PolyMat(xs, ys, n,
-					   std::complex<double>(material_real, material_imag));
+	return new PolyMat(xs, ys, n, material);
 }
 
 void PolyMat_delete(PolyMat* polymat)
@@ -21,7 +19,7 @@ void PolyMat_delete(PolyMat* polymat)
 // Material3D
 /////////////////////////////////////////////////////////////////////////////////////
 
-void Material3D_get_value(Material3D* mat, complex64* val,
+void Material3D_get_value(Material3D* mat, double* val,
 						  double fpk, double fpj, double fpi)
 {
 	int k = std::round(fpk);
@@ -30,41 +28,36 @@ void Material3D_get_value(Material3D* mat, complex64* val,
 	double koff = fpk - k;
 	double joff = fpj - j;
 	double ioff = fpi - i;
-	std::vector<std::complex<double>> grid(1);
-	std::complex<double> mat_val;
+	std::vector<double> grid(1);
 	mat->get_values(grid.data(), k, k+1, j, j+1, i, i+1, koff, joff, ioff);
-    val[0].real = grid[0].real();
-    val[0].imag = grid[0].imag();
+    val[0] = grid[0];
 }
 
-void Material3D_get_values(Material3D* mat, complex64* arr,
+void Material3D_get_values(Material3D* mat, double* arr,
 						   int k1, int k2, 
 						   int j1, int j2,
 						   int i1, int i2,
 						   double koff, double joff, double ioff)
 {
-    std::complex<double> val;
     int Ny = j2-j1,
         Nx = k2-k1,
         Nz = i2-i1;
 
-	std::vector<std::complex<double>> grid(Nx*Ny*Nz);
+	std::vector<double> grid(Nx*Ny*Nz);
     mat->get_values(grid.data(), k1, k2, j1, j2, i1, i2, koff, joff, ioff);
 
-	// convert from std::complex<double> to (Numpy) complex64
+	// convert from double to (Numpy) complex64  (nope)
     for(int i = 0; i < Nx*Ny*Nz; i++) {
-        val = grid[i];
-        arr[i].real = val.real();
-        arr[i].imag = val.imag();
+        arr[i] = grid[i];
     }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
 // ConstantMaterial3D
 /////////////////////////////////////////////////////////////////////////////////////
-ConstantMaterial3D* ConstantMaterial3D_new(double real, double imag)
+ConstantMaterial3D* ConstantMaterial3D_new(double val)
 {
-    return new ConstantMaterial3D(std::complex<double>(real, imag));
+    return new ConstantMaterial3D(val);
 }
 void ConstantMaterial3D_delete(ConstantMaterial3D* cm)
 {

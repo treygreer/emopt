@@ -60,7 +60,7 @@ class PolyMat(object):
         self._object = libGrid.PolyMat_new(np.array(xs, dtype=np.float64),
                                            np.array(ys, dtype=np.float64),
                                            len(xs),
-                                           material_value.real, material_value.imag)
+                                           material_value)
     def __del__(self):
         libGrid.PolyMat_delete(self._object)
 
@@ -95,10 +95,10 @@ class Material3D(object):
 
         Returns
         -------
-        complex128
-            The complex material value at the desired location.
+        double
+            The real material value at the desired location.
         """
-        value = np.array([0], dtype=np.complex128)
+        value = np.array([0], dtype=np.double)
         libGrid.Material3D_get_value(self._object, value, x, y, z)
 
         return value
@@ -122,14 +122,14 @@ class Material3D(object):
         i2 : int
             The upper integer bound on z of the desired region
         arr : numpy.ndarray (optional)
-            The array with dimension (k2-k1)x(j2-j1)x(i2-i1) with type np.complex128
+            The array with dimension (k2-k1)x(j2-j1)x(i2-i1) with type np.double
             which will store the retrieved material distribution. If None, a
             new array will be created. (optional = None)
 
         Returns
         -------
         numpy.ndarray
-            The retrieved complex material distribution, 3D numpy array
+            The retrieved material distribution, 3D numpy array
             in index order [z,y,x]
         """
         Nx = k2-k1
@@ -137,7 +137,7 @@ class Material3D(object):
         Nz = i2-i1
 
         if(type(arr) == type(None)):
-            arr = np.zeros(Nx*Ny*Nz, dtype=np.complex128)
+            arr = np.zeros(Nx*Ny*Nz, dtype=np.double)
         else:
             arr = np.ravel(arr)
 
@@ -188,17 +188,17 @@ class ConstantMaterial3D(Material3D):
 
     Parameters
     ----------
-    value : complex
+    value : double
         The constant material value.
 
     Attributes
     ----------
-    material_value : complex
+    material_value : double
         The constant material value
     """
     def __init__(self, value):
         self._material_value = value
-        self._object = libGrid.ConstantMaterial3D_new(value.real, value.imag)
+        self._object = libGrid.ConstantMaterial3D_new(value)
 
     def __del__(self):
         libGrid.ConstantMaterial3D_delete(self._object)
@@ -210,8 +210,7 @@ class ConstantMaterial3D(Material3D):
     @material_value.setter
     def material_value(self, new_value):
         libGrid.ConstantMaterial3D_set_material(self._object,
-                                              new_value.real,
-                                              new_value.imag)
+                                              new_value)
         self._material_value = new_value
 
 class StructuredMaterial3D(Material3D):

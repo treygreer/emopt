@@ -32,12 +32,9 @@ class CPP_FDTD(Structure):
                 ("Hx", POINTER(c_double)),
                 ("Hy", POINTER(c_double)),
                 ("Hz", POINTER(c_double)),
-                ("eps_x", POINTER(CPP_COMPLEX128)),
-                ("eps_y", POINTER(CPP_COMPLEX128)),
-                ("eps_z", POINTER(CPP_COMPLEX128)),
-                ("mu_x",  POINTER(CPP_COMPLEX128)),
-                ("mu_y",  POINTER(CPP_COMPLEX128)),
-                ("mu_z",  POINTER(CPP_COMPLEX128))]
+                ("eps_x", POINTER(c_double)),
+                ("eps_y", POINTER(c_double)),
+                ("eps_z", POINTER(c_double))]
 
 #######################################################
 # ctypes interface definition

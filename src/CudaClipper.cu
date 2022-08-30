@@ -177,7 +177,7 @@ __global__ void cuda_trapezoid_box_intersection_area(double *cell_fractions,
 	}
 }
 
-__global__ void zero_layer_values(thrust::complex<double>* layer_values, int Nx, int Ny)
+__global__ void zero_layer_values(double* layer_values, int Nx, int Ny)
 {
 	const int j = blockIdx.y * blockDim.y + threadIdx.y;
 	const int k = blockIdx.x * blockDim.x + threadIdx.x;
@@ -212,8 +212,8 @@ void CudaClipper::compute_ring_cell_fractions(BoostRing ring)
 	}
 }
 
-__global__ void cuda_composite_cell_fraction(thrust::complex<double> *layer_values,
-											 thrust::complex<double> matval,
+__global__ void cuda_composite_cell_fraction(double *layer_values,
+											 double matval,
 											 double *cell_fractions,
 											 int Nx, int Ny)
 {
@@ -225,7 +225,7 @@ __global__ void cuda_composite_cell_fraction(thrust::complex<double> *layer_valu
 	}
 }
 
-void CudaClipper::composite_cell_fraction(thrust::complex<double> matval)
+void CudaClipper::composite_cell_fraction(double matval)
 {
 	cuda_composite_cell_fraction <<<numBlocks(), threadsPerBlock()>>>
 		(_layer_values, matval, _cell_fractions, Nx(), Ny());
@@ -238,11 +238,11 @@ CudaClipper::CudaClipper(int k1, int k2, int j1, int j2, int i1, int i2,
 	_koff(koff), _joff(joff),
 	_dx(dx), _dy(dy)
 {
-	_grid = (thrust::complex<double>*) checkCudaMallocManaged(sizeof(thrust::complex<double>) *
+	_grid = (double*) checkCudaMallocManaged(sizeof(double) *
 															  Nx() * Ny() * Nz());
 	for (int i=0; i<Nx()*Ny()*Nz(); ++i)
 		_grid[i] = 0.0;
-	_layer_values = (thrust::complex<double>*) checkCudaMallocManaged(sizeof(thrust::complex<double>) *
+	_layer_values = (double*) checkCudaMallocManaged(sizeof(double) *
 																	  Nx() * Ny());
 	_cell_fractions = (double*) checkCudaMallocManaged(sizeof(double) *
 													   Nx() * Ny());
@@ -272,8 +272,8 @@ void CudaClipper::compute_layer_values(StructuredMaterialLayer* layer)
 	}
 }
 
-__global__ void cuda_composite_layer(thrust::complex<double>* slice,
-									 thrust::complex<double>* layer_values, double alpha,
+__global__ void cuda_composite_layer(double* slice,
+									 double* layer_values, double alpha,
 									 int Nx, int Ny)
 {
 	const int j = blockIdx.y * blockDim.y + threadIdx.y;
@@ -290,7 +290,7 @@ void CudaClipper::composite_layer_values_into_slice(double alpha, int z_index)
 		(&_grid[(z_index-_i1)*Nx()*Ny()], _layer_values, alpha, Nx(), Ny());
 }
 
-void CudaClipper::return_grid_values(std::complex<double> *grid)
+void CudaClipper::return_grid_values(double *grid)
 {
 	cudaError_t errSync  = cudaGetLastError();
 	cudaError_t errAsync = cudaDeviceSynchronize();
@@ -303,7 +303,6 @@ void CudaClipper::return_grid_values(std::complex<double> *grid)
 		exit(-1);
 	}
 	for (int i=0; i<Nx()*Ny()*Nz(); ++i) {
-		grid[i].real(_grid[i].real());
-		grid[i].imag(_grid[i].imag());
+		grid[i] = _grid[i];
 	}
 }

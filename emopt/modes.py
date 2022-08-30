@@ -73,9 +73,6 @@ class ModeFullVector(object):
     eps : numpy.ndarray
         The array containing the slice of permittivity for which the modes are
         calculated.
-    mu : numpy.ndarray
-        The array containing the slice of permeabilities for which the modes are
-        calculated.
     n0 : float (optional)
         The 'guess' for the effective index around which the modes are
         computed. In general, this value should be larger than the index of the
@@ -123,7 +120,7 @@ class ModeFullVector(object):
         Get the source current distribution for the i'th mode.
     """
 
-    def __init__(self, wavelength, eps, mu, domain, n0=1.0, neigs=1, \
+    def __init__(self, wavelength, eps, domain, n0=1.0, neigs=1, \
                  backwards=False, verbose=True):
 
         info_message('ModeFullVector __init__')
@@ -132,7 +129,6 @@ class ModeFullVector(object):
         self.wavelength = wavelength
 
         self.eps = eps
-        self.mu = mu
         self.domain = domain
 
         self._fshape = domain.shape
@@ -281,7 +277,6 @@ class ModeFullVector(object):
         A = self._A
         B = self._B
         eps = self.eps
-        mu = self.mu
         M = self._M
         N = self._N
 
@@ -305,40 +300,25 @@ class ModeFullVector(object):
                 eps_x = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.0, arr=None)[:,:,0]
                 eps_y = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.5, arr=None)[:,:,0]
                 eps_z = eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.0, arr=None)[:,:,0]
-                mu_x  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.0, ioff=0.5, arr=None)[:,:,0]
-                mu_y  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.0, arr=None)[:,:,0]
-                mu_z  =  mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, koff=0.0, joff=0.5, ioff=0.5, arr=None)[:,:,0]
             elif(self.ndir == 'y'):
                 # TODO: FIXME
                 get_eps_x = lambda x,y : eps.get_value(k0+y,     j0, i0+x)
                 get_eps_y = lambda x,y : eps.get_value(k0+y+0.5, j0, i0+x-0.5)
                 get_eps_z = lambda x,y : eps.get_value(k0+y,     j0, i0+x-0.5)
-                get_mu_x  = lambda x,y :  mu.get_value(k0+y+0.5, j0, i0+x-0.5)
-                get_mu_y  = lambda x,y :  mu.get_value(k0+y,     j0, i0+x)
-                get_mu_z  = lambda x,y :  mu.get_value(k0+y+0.5, j0, i0+x)
             elif(self.ndir == 'z'):
                 # TODO: does this need 1/2 cell offsets???
                 eps_x = eps.get_values(k0, k0+N, j0, j0+M, i0, i0+1, koff=0.0, joff=0.0, ioff=0.0, arr=None)[0,:,:]
                 eps_y = eps_x;
                 eps_z = eps_x;
-                mu_x  =  mu.get_values(k0, k0+N, j0, j0+M, i0, i0+1, koff=0.0, joff=0.0, ioff=0.0, arr=None)[0,:,:]
-                mu_y  =  mu_x;
-                mu_z  =  mu_x;
         else:
             eps_x = None
             eps_y = None
             eps_z = None
-            mu_x  = None
-            mu_y  = None
-            mu_z  = None
         
         comm = MPI.COMM_WORLD
         eps_x = comm.bcast(eps_x, root=0)
         eps_y = comm.bcast(eps_y, root=0)
         eps_z = comm.bcast(eps_z, root=0)
-        mu_x  = comm.bcast(mu_x,  root=0)
-        mu_y  = comm.bcast(mu_y,  root=0)
-        mu_z  = comm.bcast(mu_z,  root=0)
 
         print(f"************************************** rank {RANK} self.ib={self.ib}, self.id={self.ie}");
         print(f"eps_x.shape={eps_x.shape}")
@@ -431,7 +411,7 @@ class ModeFullVector(object):
                     A[I, JEx1] = -ody
 
                 # Hz at x,y
-                A[I, JHz] = -1j*mu_z[y,x]
+                A[I, JHz] = -1j  # mu=1
 
             # (stuff) = n_z B E_y
             elif(I < 4*N*M):
@@ -450,7 +430,7 @@ class ModeFullVector(object):
                     A[I,JEz1] = ody
 
                 # Hx at x,y
-                A[I,JHx] = -1j*mu_x[y,x]
+                A[I,JHx] = -1j # mu=1
 
                 # Setup the LHS B matrix
                 B[I,JEy] = 1j*self._dir
@@ -471,7 +451,7 @@ class ModeFullVector(object):
                 if(x < N-1): A[I,JEz1] = -odx
 
                 # Hy at x,y
-                A[I,JHy] = -1j*mu_y[y,x]
+                A[I,JHy] = -1j  # mu=1
 
                 # Setup the LHS B matrix
                 B[I,JEx] = -1j*self._dir
@@ -586,7 +566,6 @@ class ModeFullVector(object):
             if(self.ndir == 'x'):     #                                                                      z,y (3D domain)
                 #                                                                                       ->   y,x (2D mode)
                 eps = self.eps.get_values(k0, k0+1, j0, j0+N, i0, i0+M, arr=None)[:,:,0]
-                mu  =  self.mu.get_values(k0, k0+1, j0, j0+N, i0, i0+M, arr=None)[:,:,0]
                 xmesh,ymesh = np.meshgrid(self.domain._y, self.domain._z)
             elif(self.ndir == 'y'):
                 # TODO: FIXME
@@ -594,7 +573,7 @@ class ModeFullVector(object):
             elif(self.ndir == 'z'):
                 # TODO: FIXME
                 assert(False)
-            eta = np.sqrt(mu/eps)
+            eta = np.sqrt(1.0/eps)  # mu=1
             rsq = (xmesh-center[0])**2 + (ymesh-center[1])**2
             Ex = np.exp(-rsq/(mfd/2)**2)
             Ey = np.zeros_like(rsq, dtype=complex)
@@ -1050,7 +1029,6 @@ class ModeFullVector(object):
             Hz
         """
         eps = self.eps.get_values_in(self.domain)
-        mu = self.mu.get_values_in(self.domain)
 
         Ex = self.get_field(i, FieldComponent.Ex, squeeze=True)
         WEx = np.sum(eps.real*np.abs(Ex)**2)
@@ -1065,15 +1043,15 @@ class ModeFullVector(object):
         del Ez
 
         Hx = self.get_field(i, FieldComponent.Hx, squeeze=True)
-        WHx = np.sum(mu.real*np.abs(Hx)**2)
+        WHx = np.sum(np.abs(Hx)**2)  # mu=1
         del Hx
 
         Hy = self.get_field(i, FieldComponent.Hy, squeeze=True)
-        WHy = np.sum(mu.real*np.abs(Hy)**2)
+        WHy = np.sum(np.abs(Hy)**2)  # mu=1
         del Hy
 
         Hz = self.get_field(i, FieldComponent.Hz, squeeze=True)
-        WHz = np.sum(mu.real*np.abs(Hz)**2)
+        WHz = np.sum(np.abs(Hz)**2)  # mu=1
         del Hz
 
         Wtot = WEx+WEy+WEz+WHx+WHy+WHz
@@ -1174,7 +1152,6 @@ class ModeFullVector(object):
             Mz = np.zeros([self._M, self._N], dtype=np.complex128)
 
             eps = np.zeros([self._M, self._N], dtype=np.complex128)
-            mu = np.zeros([self._M, self._N], dtype=np.complex128)
         else:
             Jx = None; Jy = None; Jz = None
             Mx = None; My = None; Mz = None
@@ -1183,19 +1160,15 @@ class ModeFullVector(object):
         # modes in any cartesian direction. At the end, we will once again
         # permute the calculated current density components to match the users
         # supplied coordinate system
-        get_mu = None
         if(self.ndir == 'x'):
-            get_mu = lambda sx,sy : self.mu.get_values_in(self.domain, sy=sx, sz=sy, squeeze=True)
             mydx = dy
             mydy = dz
             mydz = dx
         elif(self.ndir == 'y'):
-            get_mu = lambda sx,sy : self.mu.get_values_in(self.domain, sx=sx, sz=sy, squeeze=True)
             mydx = dz
             mydy = dx
             mydz = dy
         elif(self.ndir == 'z'):
-            get_mu = lambda sx,sy : self.mu.get_values_in(self.domain, sx=sx, sy=sy, squeeze=True)
             mydx = dx
             mydy = dy
             mydz = dz
@@ -1242,10 +1215,9 @@ class ModeFullVector(object):
             if(bc[1] == 'E'): Hx[0,:] = -1*Hx[1,:]
             elif(bc[1] == 'H'): Hx[0,:] = Hx[1,:]
 
-            mu = get_mu(0.0, 0.5)
             Jy += Hx[1:-1, 1:-1]/dz
             Jz += -1*(Hx[1:-1, 1:-1] - Hx[0:-2, 1:-1])/dy
-            Mx += -1j*mu*Hx[1:-1, 1:-1]
+            Mx += -1j*Hx[1:-1, 1:-1]  # mu=1
 
             ## Calculate contribution of Hy
             Hy = np.pad(Hy, 1, 'constant', constant_values=0)
@@ -1254,10 +1226,9 @@ class ModeFullVector(object):
             if(bc[0] == 'E'): Hy[:,0] = -1*Hy[:,1]
             elif(bc[0] == 'H'): Hy[:,0] = Hy[:,1]
 
-            mu = get_mu(0.5, 0.0)
             Jx += -Hy[1:-1, 1:-1]/dz
             Jz += (Hy[1:-1, 1:-1] - Hy[1:-1, 0:-2])/dx
-            My += -1j*mu*Hy[1:-1, 1:-1]
+            My += -1j*Hy[1:-1, 1:-1]  # mu=1
 
             ## Calculate contribution of Hz
             # There isn't one

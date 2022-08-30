@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
+#include <chrono>
 
 /* Cuda TODO:
   o  3D array allocation using cudaMallod3D() ?
@@ -40,12 +41,9 @@ fdtd::FDTD::FDTD(int Nx, int Ny, int Nz)
 	_hcd.Hz = (double *) checkCudaMallocManaged(N*sizeof(double));
 
 	// Allocate material arrays
-	_hcd.eps_x = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
-	_hcd.eps_y = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
-	_hcd.eps_z = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
-	_hcd.mu_x = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
-	_hcd.mu_y = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
-	_hcd.mu_z = (complex128 *) checkCudaMallocManaged(N*sizeof(complex128));
+	_hcd.eps_x = (double *) checkCudaMallocManaged(N*sizeof(double));
+	_hcd.eps_y = (double *) checkCudaMallocManaged(N*sizeof(double));
+	_hcd.eps_z = (double *) checkCudaMallocManaged(N*sizeof(double));
 
     // make sure all of our PML arrays start NULL
     _hcd.pml_Exy0 = NULL; _hcd.pml_Exy1 = NULL; _hcd.pml_Exz0 = NULL; _hcd.pml_Exz1 = NULL;
@@ -77,7 +75,6 @@ fdtd::FDTD::~FDTD()
 
 	// Clean up Material arrays
 	cudaFree(_hcd.eps_x); cudaFree(_hcd.eps_y); cudaFree(_hcd.eps_z);
-	cudaFree(_hcd.mu_x); cudaFree(_hcd.mu_y); cudaFree(_hcd.mu_z);
 
     // Clean up PML arrays
     cudaFree(_hcd.pml_Exy0); cudaFree(_hcd.pml_Exy1); cudaFree(_hcd.pml_Exz0); cudaFree(_hcd.pml_Exz1);
@@ -144,7 +141,7 @@ double cuda_src_func_t(double t, double phase)
 __global__
 void update_H_fields(double t)
 {
-	double b, C, kappa,	dt_by_mux, dt_by_muy, dt_by_muz;
+	double b, C, kappa,	dt;
 
     int ind_ijk, ind_ip1jk, ind_ijp1k, ind_ijkp1,
         ind_pml, 
@@ -174,24 +171,22 @@ void update_H_fields(double t)
 		ind_ijkp1 = (i+0)*Ny*Nx + (j+0)*Nx + (kp1);
 
 		// compute prefactors
-		dt_by_mux = cd.dt/cd.mu_x[ind_ijk].real;
-		dt_by_muy = cd.dt/cd.mu_y[ind_ijk].real;
-		dt_by_muz = cd.dt/cd.mu_z[ind_ijk].real;
+		dt = cd.dt;
 
 		// Update Hx
 		dEzdy = cd.ody * ((kill_ywrap ? 0 : cd.Ez[ind_ijp1k])  - cd.Ez[ind_ijk]);
 		dEydz = cd.odz * ((kill_zwrap ? 0 : cd.Ey[ind_ip1jk])  - cd.Ey[ind_ijk]);
-		cd.Hx[ind_ijk] += dt_by_mux * (dEydz - dEzdy);
+		cd.Hx[ind_ijk] += dt * (dEydz - dEzdy);
 
 		// update Hy
 		dExdz = cd.odz * ((kill_zwrap ? 0 : cd.Ex[ind_ip1jk]) - cd.Ex[ind_ijk]);
 		dEzdx = cd.odx * ((kill_xwrap ? 0 : cd.Ez[ind_ijkp1]) - cd.Ez[ind_ijk]);
-		cd.Hy[ind_ijk] += dt_by_muy * (dEzdx - dExdz);
+		cd.Hy[ind_ijk] += dt * (dEzdx - dExdz);
 
 		// update Hz
 		dEydx = cd.odx * ((kill_xwrap ? 0 : cd.Ey[ind_ijkp1]) - cd.Ey[ind_ijk]);
 		dExdy = cd.ody * ((kill_ywrap ? 0 : cd.Ex[ind_ijp1k]) - cd.Ex[ind_ijk]);
-		cd.Hz[ind_ijk] += dt_by_muz * (dExdy - dEydx);
+		cd.Hz[ind_ijk] += dt * (dExdy - dEydx);
 
 		// Do PML updates
 		if(k < cd.pml_xmin) {
@@ -208,8 +203,8 @@ void update_H_fields(double t)
 			cd.pml_Eyx0[ind_pml] = C * dEydx + b*cd.pml_Eyx0[ind_pml];
 			cd.pml_Ezx0[ind_pml] = C * dEzdx + b*cd.pml_Ezx0[ind_pml];
 
-			cd.Hz[ind_ijk] -= dt_by_muz * (cd.pml_Eyx0[ind_pml]-dEydx+dEydx/kappa);
-			cd.Hy[ind_ijk] += dt_by_muy * (cd.pml_Ezx0[ind_pml]-dEzdx+dEzdx/kappa);
+			cd.Hz[ind_ijk] -= dt * (cd.pml_Eyx0[ind_pml]-dEydx+dEydx/kappa);
+			cd.Hy[ind_ijk] += dt * (cd.pml_Ezx0[ind_pml]-dEzdx+dEzdx/kappa);
 
 		}
 		else if(k  >= cd.pml_xmax) {
@@ -224,8 +219,8 @@ void update_H_fields(double t)
 			cd.pml_Eyx1[ind_pml] = C * dEydx + b*cd.pml_Eyx1[ind_pml];
 			cd.pml_Ezx1[ind_pml] = C * dEzdx + b*cd.pml_Ezx1[ind_pml];
 
-			cd.Hz[ind_ijk] -= dt_by_muz * (cd.pml_Eyx1[ind_pml]-dEydx+dEydx/kappa);
-			cd.Hy[ind_ijk] += dt_by_muy * (cd.pml_Ezx1[ind_pml]-dEzdx+dEzdx/kappa);
+			cd.Hz[ind_ijk] -= dt * (cd.pml_Eyx1[ind_pml]-dEydx+dEydx/kappa);
+			cd.Hy[ind_ijk] += dt * (cd.pml_Ezx1[ind_pml]-dEzdx+dEzdx/kappa);
 		}
 
 		if(j < cd.pml_ymin) {
@@ -240,8 +235,8 @@ void update_H_fields(double t)
 			cd.pml_Exy0[ind_pml] = C * dExdy + b*cd.pml_Exy0[ind_pml];
 			cd.pml_Ezy0[ind_pml] = C * dEzdy + b*cd.pml_Ezy0[ind_pml];
 
-			cd.Hz[ind_ijk] += dt_by_muz * (cd.pml_Exy0[ind_pml]-dExdy+dExdy/kappa);
-			cd.Hx[ind_ijk] -= dt_by_mux * (cd.pml_Ezy0[ind_pml]-dEzdy+dEzdy/kappa);
+			cd.Hz[ind_ijk] += dt * (cd.pml_Exy0[ind_pml]-dExdy+dExdy/kappa);
+			cd.Hx[ind_ijk] -= dt * (cd.pml_Ezy0[ind_pml]-dEzdy+dEzdy/kappa);
 		}
 		else if(j >= cd.pml_ymax) {
 			ind_pml = i*(Ny - cd.pml_ymax)*Nx +(j - cd.pml_ymax)*Nx + k;
@@ -255,8 +250,8 @@ void update_H_fields(double t)
 			cd.pml_Exy1[ind_pml] = C * dExdy + b*cd.pml_Exy1[ind_pml];
 			cd.pml_Ezy1[ind_pml] = C * dEzdy + b*cd.pml_Ezy1[ind_pml];
 
-			cd.Hz[ind_ijk] += dt_by_muz * (cd.pml_Exy1[ind_pml]-dExdy+dExdy/kappa);
-			cd.Hx[ind_ijk] -= dt_by_mux * (cd.pml_Ezy1[ind_pml]-dEzdy+dEzdy/kappa);
+			cd.Hz[ind_ijk] += dt * (cd.pml_Exy1[ind_pml]-dExdy+dExdy/kappa);
+			cd.Hx[ind_ijk] -= dt * (cd.pml_Ezy1[ind_pml]-dEzdy+dEzdy/kappa);
 		}
 
 		if(i < cd.pml_zmin) {
@@ -271,8 +266,8 @@ void update_H_fields(double t)
 			cd.pml_Exz0[ind_pml] = C * dExdz + b*cd.pml_Exz0[ind_pml];
 			cd.pml_Eyz0[ind_pml] = C * dEydz + b*cd.pml_Eyz0[ind_pml];
 
-			cd.Hx[ind_ijk] += dt_by_mux * (cd.pml_Eyz0[ind_pml]-dEydz+dEydz/kappa);
-			cd.Hy[ind_ijk] -= dt_by_muy * (cd.pml_Exz0[ind_pml]-dExdz+dExdz/kappa);
+			cd.Hx[ind_ijk] += dt * (cd.pml_Eyz0[ind_pml]-dEydz+dEydz/kappa);
+			cd.Hy[ind_ijk] -= dt * (cd.pml_Exz0[ind_pml]-dExdz+dExdz/kappa);
 		}
 		else if(i > cd.pml_zmax) {
 			ind_pml = (i - cd.pml_zmax)*Ny*Nx +j*Nx + k;
@@ -286,8 +281,8 @@ void update_H_fields(double t)
 			cd.pml_Exz1[ind_pml] = C * dExdz + b*cd.pml_Exz1[ind_pml];
 			cd.pml_Eyz1[ind_pml] = C * dEydz + b*cd.pml_Eyz1[ind_pml];
 
-			cd.Hx[ind_ijk] += dt_by_mux * (cd.pml_Eyz1[ind_pml]-dEydz+dEydz/kappa);
-			cd.Hy[ind_ijk] -= dt_by_muy * (cd.pml_Exz1[ind_pml]-dExdz+dExdz/kappa);
+			cd.Hx[ind_ijk] += dt * (cd.pml_Eyz1[ind_pml]-dEydz+dEydz/kappa);
+			cd.Hy[ind_ijk] -= dt * (cd.pml_Exz1[ind_pml]-dExdz+dExdz/kappa);
 		}
 
 	}
@@ -311,15 +306,15 @@ void update_H_source(double t,
 
         // update Mx
 		src_t = cuda_src_func_t(t, Mx[ind_src].imag);
-		cd.Hx[ind_ijk] += src_t * Mx[ind_src].real * cd.dt / cd.mu_x[ind_ijk].real;
+		cd.Hx[ind_ijk] += src_t * Mx[ind_src].real * cd.dt;
 
         // update My
 		src_t = cuda_src_func_t(t, My[ind_src].imag);
-		cd.Hy[ind_ijk] += src_t * My[ind_src].real * cd.dt / cd.mu_y[ind_ijk].real;
+		cd.Hy[ind_ijk] += src_t * My[ind_src].real * cd.dt;
 
         // update Mz
 		src_t = cuda_src_func_t(t, Mz[ind_src].imag);
-		cd.Hz[ind_ijk] += src_t * Mz[ind_src].real * cd.dt / cd.mu_z[ind_ijk].real;
+		cd.Hz[ind_ijk] += src_t * Mz[ind_src].real * cd.dt;
     }
 }
 
@@ -381,9 +376,9 @@ void update_E_fields(double t)
 		ind_im1jk = (im1)*cd.Ny*cd.Nx + (j-0)*cd.Nx + (k-0);
 		ind_ijkm1 = (i-0)*cd.Ny*cd.Nx + (j-0)*cd.Nx + (km1);
 
-		b_x = cd.dt/cd.eps_x[ind_ijk].real;
-		b_y = cd.dt/cd.eps_y[ind_ijk].real;
-		b_z = cd.dt/cd.eps_z[ind_ijk].real;
+		b_x = cd.dt/cd.eps_x[ind_ijk];
+		b_y = cd.dt/cd.eps_y[ind_ijk];
+		b_z = cd.dt/cd.eps_z[ind_ijk];
 
 		// Update Ex
 		dHzdy = cd.ody*(cd.Hz[ind_ijk] - (action_ywrap == ACTION_ZERO ? 0.0 :
@@ -528,17 +523,17 @@ void update_E_source(double t,
 		ind_src = i*Js*Ks + j*Ks + k;
 
 		// update Jx
-		b = cd.dt/cd.eps_x[ind_ijk].real;
+		b = cd.dt/cd.eps_x[ind_ijk];
 		src_t = cuda_src_func_t(t, Jx[ind_src].imag);
 		cd.Ex[ind_ijk] -= src_t * Jx[ind_src].real * b;
 
 		// update Jy
-		b = cd.dt/cd.eps_y[ind_ijk].real;
+		b = cd.dt/cd.eps_y[ind_ijk];
 		src_t = cuda_src_func_t(t, Jy[ind_src].imag);
 		cd.Ey[ind_ijk] -= src_t * Jy[ind_src].real * b;
 
 		// update Jz
-		b = cd.dt/cd.eps_z[ind_ijk].real;
+		b = cd.dt/cd.eps_z[ind_ijk];
 		src_t = cuda_src_func_t(t, Jz[ind_src].imag);
 		cd.Ez[ind_ijk] -= src_t * Jz[ind_src].real * b;
 	}
@@ -593,6 +588,7 @@ void fdtd::FDTD::update(double start_time, int num_time_steps)
 		assert(0);
 	}
 
+	auto start_clock = std::chrono::high_resolution_clock::now();
 	double time = start_time;
     for(int i = 0; i < num_time_steps; ++i) {
 		update_H(time);
@@ -609,6 +605,10 @@ void fdtd::FDTD::update(double start_time, int num_time_steps)
 		printf("Cuda async kernel error: %s\n", cudaGetErrorString(errAsync));
 		exit(-1);
 	}
+	auto stop_clock = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop_clock - start_clock);
+	double duration_per_step = (double) duration.count() / num_time_steps;
+	std::cout << "Time taken by per step: " << duration_per_step << "us"<< std::endl;
 }
 
 
